@@ -6,6 +6,7 @@
 #!icon = 
 #!date = 2024-10-22 11:00
 
+[Script]
 if ($request.url.indexOf('mb3admin.com/admin/service/registration/validateDevice') != -1) {
       if($response.status!=200){
           $notification.post("EmbyPremiere已激活", "", "");
