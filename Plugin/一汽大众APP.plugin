@@ -1,5 +1,6 @@
 #!name= 一汽大众
-#!icon= https://raw.githubusercontent.com/Tartarus2014/For-own-use/master/Color/115.png
+#!icon= 
+#!desc= 一汽大众app去广告，测试
 
 [Rewrite]
 # hostname = one-app-h5.faw-vw.com
