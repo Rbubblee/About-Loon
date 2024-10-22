@@ -1,5 +1,12 @@
 #!name= ChangeUA
 #!desc= 更换 User-Agent 以提升体验，使用手机百度 Quark 的 User-Agent。
+#!tag = 功能增强
+#!author = 原作者未知，R.bubble微微修改
+#!system = 
+#!system_version = 
+#!loon_version = 3.2.2(749)
+#!icon= https://raw.githubusercontent.com/Clean-PHP/useragent/refs/heads/main/icon/browser/Safari.svg
+#!date = 2024-10-21 11:00
 
 [Rewrite]
 # 知乎（部分替换为手机百度 Quark 的 User-Agent）
