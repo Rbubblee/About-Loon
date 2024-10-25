@@ -4,8 +4,10 @@
 
 [Rewrite]
 # 开屏广告 感谢【finch.ftm】分享
-^https?:\/\/one-app-h5\.faw-vw\.com\/prod-api\/mobile\/one-app\/general\/public\/v1\/official_activity\/get_animation_putaway_list\?appkey.* url reject-200
-^https?:\/\/one-app-h5\.faw-vw\.com\/prod-api\/mobile\/one-app\/general\/public\/v1\/first_page\/get_carousel_list?appkey.* url reject-200
+^https?:\/\/cdp-fileserver-prod-1256532032.cos.ap-beijing.myqcloud.com\/vw\/simple\/bmp\/user\headPics\/* - reject-dict
+^https?:\/\/avris-prod-1256532032.cos.ap-beijing.myqcloud.com\/cms-static\/avris\/* - reject-dict
+^https?:\/\/one-app-h5\.faw-vw\.com\/prod-api\/mobile\/one-app\/general\/public\/v1\/official_activity\/get_animation_putaway_list\?appkey.* - reject-dict
+^https?:\/\/one-app-h5\.faw-vw\.com\/prod-api\/mobile\/one-app\/general\/public\/v1\/first_page\/get_carousel_list?appkey.* - reject-dict
 
 [MITM]
-hostname = one-app-h5.faw-vw.com
+hostname = one-app-h5.faw-vw.com,cdp-fileserver-prod-1256532032.cos.ap-beijing.myqcloud.com
