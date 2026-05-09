@@ -1,0 +1,34 @@
+#!name=Zeekr_remove_ads
+#!desc=极氪 App 去广告 - 屏蔽神策数据、极光推送、火山引擎等第三方追踪与广告 SDK
+#!system=ios
+#!author=iKeLee
+#!version=1.0.0
+
+[Rule]
+# 神策分析 Sensors Analytics - 用户行为数据上报
+DOMAIN-SUFFIX, sensorsdata.cn, REJECT
+DOMAIN-SUFFIX, sensorsdata.com, REJECT
+# 极光推送 JPush - 广告消息推送通道
+DOMAIN-SUFFIX, jpush.cn, REJECT
+DOMAIN-SUFFIX, jiguang.cn, REJECT
+# 火山引擎/字节跳动 - 埋点分析（直播统计等）
+DOMAIN-SUFFIX, volcengine.com, REJECT
+DOMAIN-SUFFIX, byteoversea.com, REJECT
+# 阿里云日志 - 车控日志设备绑定上报
+DOMAIN-SUFFIX, aliyuncs.com, REJECT
+# 腾讯 Bugly - 崩溃日志收集（可选，不影响App运行）
+DOMAIN-SUFFIX, bugly.qq.com, REJECT
+# UC 啄木鸟 - 崩溃检测
+DOMAIN-SUFFIX, uc.cn, REJECT
+# 极氪自有追踪端点
+DOMAIN-SUFFIX, visitor.zeekrlife.com, REJECT
+DOMAIN-SUFFIX, survey.zeekrlife.com, REJECT
+DOMAIN-SUFFIX, obsv3.zeekrlife.com, REJECT
+
+[URL Rewrite]
+^https?://visitor\.zeekrlife\.com/.* reject
+^https?://survey\.zeekrlife\.com/.* reject
+^https?://obsv3\.zeekrlife\.com/.* reject
+
+[MITM]
+hostname = *.sensorsdata.cn, *.sensorsdata.com, *.jpush.cn, *.jiguang.cn, *.volcengine.com, *.byteoversea.com, *.aliyuncs.com, *.bugly.qq.com, *.uc.cn, visitor.zeekrlife.com, survey.zeekrlife.com, obsv3.zeekrlife.com

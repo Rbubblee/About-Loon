@@ -1,0 +1,35 @@
+#!name=Midea_remove_ads
+#!desc=美的美居 App 去广告 - 屏蔽火山引擎、阿里百川、京东开普勒、极光推送等第三方追踪与广告 SDK
+#!system=ios
+#!author=iKeLee
+#!version=1.0.0
+
+[Rule]
+# 火山引擎 RangersAppLog - 埋点分析（采集范围最广的SDK）
+DOMAIN-SUFFIX, volcengine.com, REJECT
+DOMAIN-SUFFIX, byteoversea.com, REJECT
+# 阿里设备标识/百川 - 广告归因、电商跳转
+DOMAIN-SUFFIX, alibaba.com, REJECT
+DOMAIN-SUFFIX, alicdn.com, REJECT
+# 京东开普勒 - 广告展示与跳转
+DOMAIN-SUFFIX, jd.com, REJECT
+DOMAIN-SUFFIX, jd.hk, REJECT
+# 极光推送 JPush - 广告消息推送
+DOMAIN-SUFFIX, jpush.cn, REJECT
+DOMAIN-SUFFIX, jiguang.cn, REJECT
+# 推送服务商
+DOMAIN-SUFFIX, xiaomi.com, REJECT
+DOMAIN-SUFFIX, heytapmobi.com, REJECT
+DOMAIN-SUFFIX, vivo.com.cn, REJECT
+DOMAIN-SUFFIX, hicloud.com, REJECT
+# Facebook 追踪（海外版 MSmartHome）
+DOMAIN-SUFFIX, facebook.com, REJECT
+DOMAIN-SUFFIX, fbcdn.net, REJECT
+DOMAIN-SUFFIX, flurry.com, REJECT
+
+[URL Rewrite]
+^https?://.*\.volcengine\.com/.* reject
+^https?://.*\.jpush\.cn/.* reject
+
+[MITM]
+hostname = *.volcengine.com, *.byteoversea.com, *.alibaba.com, *.alicdn.com, *.jpush.cn, *.jiguang.cn, *.flurry.com
