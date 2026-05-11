@@ -1,24 +1,26 @@
 #!name=Zeekr_remove_ads
-#!desc=极氪 App 去广告+屏蔽社区/服务/极物 - 屏蔽追踪SDK、社区、服务、极物商城
-#!system=ios
+#!desc=极氪App去广告+屏蔽社区/服务/极物 - 追踪SDK拦截+API数据清空+域名阻断
+#!system=iOS,iPadOS
 #!author=iKeLee
-#!version=1.1.0
+#!version=2.0.0
+#!loon_version=3.2.1(733)
+#!tag=去广告,极氪
 
 [Rule]
-# 神策分析 Sensors Analytics - 用户行为数据上报
+# 神策分析 Sensors Analytics
 DOMAIN-SUFFIX, sensorsdata.cn, REJECT
 DOMAIN-SUFFIX, sensorsdata.com, REJECT
-# 极光推送 JPush - 广告消息推送通道
+# 极光推送 JPush
 DOMAIN-SUFFIX, jpush.cn, REJECT
 DOMAIN-SUFFIX, jiguang.cn, REJECT
-# 火山引擎/字节跳动 - 埋点分析（直播统计等）
+# 火山引擎/字节跳动
 DOMAIN-SUFFIX, volcengine.com, REJECT
 DOMAIN-SUFFIX, byteoversea.com, REJECT
-# 阿里云日志 - 车控日志设备绑定上报
+# 阿里云日志
 DOMAIN-SUFFIX, aliyuncs.com, REJECT
-# 腾讯 Bugly - 崩溃日志收集（可选，不影响App运行）
+# 腾讯 Bugly
 DOMAIN-SUFFIX, bugly.qq.com, REJECT
-# UC 啄木鸟 - 崩溃检测
+# UC 啄木鸟
 DOMAIN-SUFFIX, uc.cn, REJECT
 # 极氪自有追踪端点
 DOMAIN-SUFFIX, visitor.zeekrlife.com, REJECT
@@ -32,31 +34,43 @@ DOMAIN-SUFFIX, haowu-mp-oss.halvie.com, REJECT
 DOMAIN-SUFFIX, image-halvie.halvie.com, REJECT
 DOMAIN-SUFFIX, haowu-track-prod.cn-hangzhou.log.aliyuncs.com, REJECT
 
-# === 屏蔽社区 ===
+# === 屏蔽社区 H5 页面 ===
 DOMAIN-SUFFIX, zeekrlife-h5.zeekrlife.com, REJECT
-# 社区BBS API（主网关上按路径阻断，需MITM）
-URL-REGEX, ^https?://api-gw-toc\.zeekrlife\.com/zeekrlife-bbs-theme/.*, REJECT
-URL-REGEX, ^https?://api-gw-toc\.zeekrlife\.com/zeekrlife-mp-order/v1/posts/.*, REJECT
 
 # === 屏蔽服务 ===
 DOMAIN-SUFFIX, touchpoint-api.zeekrlife.com, REJECT
 DOMAIN-SUFFIX, im-web.zeekrlife.com, REJECT
 
-[URL Rewrite]
-^https?://visitor\.zeekrlife\.com/.* reject
-^https?://survey\.zeekrlife\.com/.* reject
-^https?://obsv3\.zeekrlife\.com/.* reject
-# 极物商城
-^https?://zeekrlife-halvie-mall-uni-h5\.halvie\.com/.* reject
-^https?://zkmall-apigw\.halvie\.com/.* reject
-# 社区
-^https?://zeekrlife-h5\.zeekrlife\.com/.* reject
-# 社区BBS API
-^https?://api-gw-toc\.zeekrlife\.com/zeekrlife-bbs-theme/.* reject
-^https?://api-gw-toc\.zeekrlife\.com/zeekrlife-mp-order/v1/posts/.* reject
-# 服务
-^https?://touchpoint-api\.zeekrlife\.com/.* reject
-^https?://im-web\.zeekrlife\.com/.* reject
+# === 社区BBS API 路径阻断 ===
+URL-REGEX, ^https?://api-gw-toc\.zeekrlife\.com/zeekrlife-bbs-theme/.*, REJECT
+URL-REGEX, ^https?://api-gw-toc\.zeekrlife\.com/zeekrlife-mp-order/v1/posts/.*, REJECT
+
+[Rewrite]
+# --- 服务页面：清空模块数据 ---
+# 用 jq 将服务页 floors 置空，效果等于服务 Tab 空白
+^https?:\/\/api-gw-toc\.zeekrlife\.com\/zeekrlife-mp-bnr\/open\/toc\/v1\/servicePage\/module\/query$ response-body-json-jq https://raw.githubusercontent.com/Rbubblee/About-Loon/main/Script/zeekr_service.jq
+
+# --- 社区内容：过滤 container/page 中的 BBS 内容 ---
+# 保留非 BBS 的页面内容（个人页、爱车页），只移除社区(BBS)容器
+^https?:\/\/api-gw-toc\.zeekrlife\.com\/zeekrlife-mp-bnr\/open\/v1\/container\/page$ response-body-json-jq https://raw.githubusercontent.com/Rbubblee/About-Loon/main/Script/zeekr_community.jq
+
+# --- 社区BBS API / H5 页面：直接返回空字典 ---
+^https?:\/\/api-gw-toc\.zeekrlife\.com\/zeekrlife-bbs-theme\/.* reject-dict
+^https?:\/\/api-gw-toc\.zeekrlife\.com\/zeekrlife-mp-order\/v1\/posts\/.* reject-dict
+^https?:\/\/zeekrlife-h5\.zeekrlife\.com\/.* reject-dict
+
+# --- 极物商城 ---
+^https?:\/\/zeekrlife-halvie-mall-uni-h5\.halvie\.com\/.* reject-dict
+^https?:\/\/zkmall-apigw\.halvie\.com\/.* reject-dict
+
+# --- 客服/服务 ---
+^https?:\/\/touchpoint-api\.zeekrlife\.com\/.* reject-dict
+^https?:\/\/im-web\.zeekrlife\.com\/.* reject-dict
+
+# --- 追踪端点 ---
+^https?:\/\/visitor\.zeekrlife\.com\/.* reject
+^https?:\/\/survey\.zeekrlife\.com\/.* reject
+^https?:\/\/obsv3\.zeekrlife\.com\/.* reject
 
 [MITM]
 hostname = *.sensorsdata.cn, *.sensorsdata.com, *.jpush.cn, *.jiguang.cn, *.volcengine.com, *.byteoversea.com, *.aliyuncs.com, *.bugly.qq.com, *.uc.cn, visitor.zeekrlife.com, survey.zeekrlife.com, obsv3.zeekrlife.com, zeekrlife-h5.zeekrlife.com, zeekrlife-halvie-mall-uni-h5.halvie.com, zkmall-apigw.halvie.com, touchpoint-api.zeekrlife.com, im-web.zeekrlife.com, api-gw-toc.zeekrlife.com
