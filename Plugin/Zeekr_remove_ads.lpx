@@ -1,76 +1,144 @@
-#!name=Zeekr_remove_ads
-#!desc=极氪App去广告+屏蔽社区/服务/极物 - 追踪SDK拦截+API数据清空+域名阻断
+#!name=极氪净化
+#!desc=极氪App去广告+社区/商城/我的页面改造 - 基于抓包验证的API路径精准拦截
+#!openUrl=https://apps.apple.com/app/id1572626106
+#!homepage=https://github.com/Rbubblee/About-Loon/blob/main/Plugin/Zeekr_remove_ads.lpx
 #!system=iOS,iPadOS
-#!author=iKeLee
-#!version=2.0.0
-#!loon_version=3.2.1(733)
-#!tag=去广告,极氪
+#!system_version=15
+#!loon_version=3.3.8(932)
+#!author=Rbubblee
+#!tag=去广告,极氪,Zeekr
+#!icon=https://is1-ssl.mzstatic.com/image/thumb/Purple211/v4/f8/a4/c3/f8a4c3f9-1569-d253-84ef-96c0c9eccc25/AppIcon-0-0-1x_U007epad-0-0-0-85-220.png/120x120bb.png
+#!date=2026-07-24
+
+[Argument]
+; ============================================================
+; 模块开关 - 可按需独立控制各页面
+; ============================================================
+blockTracking=switch,true,tag=[追踪]屏蔽神策/极光/火山引擎等第三方SDK
+blockCommunity=switch,true,tag=[社区]移除社区BBS入口+顶部Banner广告+活动推荐
+blockMall=switch,true,tag=[商城]屏蔽极物商城入口(halvie域名阻断)
+blockProfile=switch,true,tag=[我的]移除我的页面中间部分推广卡片/活动入口
+blockActivity=switch,true,tag=[活动]屏蔽营销活动H5页面
+logLevel=select,"error","warn","info","debug","off",tag=日志等级
 
 [Rule]
-# 神策分析 Sensors Analytics
-DOMAIN-SUFFIX, sensorsdata.cn, REJECT
-DOMAIN-SUFFIX, sensorsdata.com, REJECT
-# 极光推送 JPush
-DOMAIN-SUFFIX, jpush.cn, REJECT
-DOMAIN-SUFFIX, jiguang.cn, REJECT
-# 火山引擎/字节跳动
-DOMAIN-SUFFIX, volcengine.com, REJECT
-DOMAIN-SUFFIX, byteoversea.com, REJECT
-# 阿里云日志
-DOMAIN-SUFFIX, aliyuncs.com, REJECT
-# 腾讯 Bugly
-DOMAIN-SUFFIX, bugly.qq.com, REJECT
-# UC 啄木鸟
-DOMAIN-SUFFIX, uc.cn, REJECT
-# 极氪自有追踪端点
-DOMAIN-SUFFIX, visitor.zeekrlife.com, REJECT
-DOMAIN-SUFFIX, survey.zeekrlife.com, REJECT
-DOMAIN-SUFFIX, obsv3.zeekrlife.com, REJECT
+; ============================================================
+; 第三方追踪/统计 SDK 域名
+; ============================================================
+; 神策分析 Sensors Analytics
+DOMAIN-SUFFIX,sensorsdata.cn,REJECT,enable={blockTracking}
+DOMAIN-SUFFIX,sensorsdata.com,REJECT,enable={blockTracking}
+; 极光推送 JPush
+DOMAIN-SUFFIX,jpush.cn,REJECT,enable={blockTracking}
+DOMAIN-SUFFIX,jiguang.cn,REJECT,enable={blockTracking}
+; 火山引擎/字节跳动
+DOMAIN-SUFFIX,volcengine.com,REJECT,enable={blockTracking}
+DOMAIN-SUFFIX,byteoversea.com,REJECT,enable={blockTracking}
+; 阿里云日志
+DOMAIN-SUFFIX,aliyuncs.com,REJECT,enable={blockTracking}
+; 腾讯 Bugly
+DOMAIN-SUFFIX,bugly.qq.com,REJECT,enable={blockTracking}
+; UC 啄木鸟
+DOMAIN-SUFFIX,uc.cn,REJECT,enable={blockTracking}
+; 极氪自有追踪/遥测端点
+DOMAIN-SUFFIX,visitor.zeekrlife.com,REJECT,enable={blockTracking}
+DOMAIN-SUFFIX,survey.zeekrlife.com,REJECT,enable={blockTracking}
+DOMAIN-SUFFIX,obsv3.zeekrlife.com,REJECT,enable={blockTracking}
 
-# === 屏蔽极物商城 ===
-DOMAIN-SUFFIX, zeekrlife-halvie-mall-uni-h5.halvie.com, REJECT
-DOMAIN-SUFFIX, zkmall-apigw.halvie.com, REJECT
-DOMAIN-SUFFIX, haowu-mp-oss.halvie.com, REJECT
-DOMAIN-SUFFIX, image-halvie.halvie.com, REJECT
-DOMAIN-SUFFIX, haowu-track-prod.cn-hangzhou.log.aliyuncs.com, REJECT
+; ============================================================
+; 社区页面 - 阻断 BBS 相关域名与 API
+; ============================================================
+; 社区H5页面 (文章详情/话题等)
+DOMAIN-SUFFIX,zeekrlife-h5.zeekrlife.com,REJECT,enable={blockCommunity}
+; BBS主题API全路径阻断 (含发现页/活动推荐/车友圈/IM等)
+URL-REGEX,^https?://api-gw-toc\.zeekrlife\.com/zeekrlife-bbs-theme/.*,REJECT,enable={blockCommunity}
+; 社区帖子API
+URL-REGEX,^https?://api-gw-toc\.zeekrlife\.com/zeekrlife-mp-order/v1/posts/.*,REJECT,enable={blockCommunity}
 
-# === 屏蔽社区 H5 页面 ===
-DOMAIN-SUFFIX, zeekrlife-h5.zeekrlife.com, REJECT
+; ============================================================
+; 极物商城 - 阻断商城域名
+; ============================================================
+DOMAIN-SUFFIX,zeekrlife-halvie-mall-uni-h5.halvie.com,REJECT,enable={blockMall}
+DOMAIN-SUFFIX,zkmall-apigw.halvie.com,REJECT,enable={blockMall}
+DOMAIN-SUFFIX,haowu-mp-oss.halvie.com,REJECT,enable={blockMall}
+DOMAIN-SUFFIX,image-halvie.halvie.com,REJECT,enable={blockMall}
+DOMAIN-SUFFIX,haowu-track-prod.cn-hangzhou.log.aliyuncs.com,REJECT,enable={blockMall}
 
-# === 屏蔽服务 ===
-DOMAIN-SUFFIX, touchpoint-api.zeekrlife.com, REJECT
-DOMAIN-SUFFIX, im-web.zeekrlife.com, REJECT
+; ============================================================
+; 服务/客服 (我的页面辅助入口)
+; ============================================================
+DOMAIN-SUFFIX,touchpoint-api.zeekrlife.com,REJECT,enable={blockProfile}
+DOMAIN-SUFFIX,im-web.zeekrlife.com,REJECT,enable={blockProfile}
 
-# === 社区BBS API 路径阻断 ===
-URL-REGEX, ^https?://api-gw-toc\.zeekrlife\.com/zeekrlife-bbs-theme/.*, REJECT
-URL-REGEX, ^https?://api-gw-toc\.zeekrlife\.com/zeekrlife-mp-order/v1/posts/.*, REJECT
+; ============================================================
+; 营销活动 H5 页面
+; ============================================================
+DOMAIN-SUFFIX,activity-h5.zeekrlife.com,REJECT,enable={blockActivity}
 
 [Rewrite]
-# --- 服务页面：清空模块数据 ---
-# 用 jq 将服务页 floors 置空，效果等于服务 Tab 空白
-^https?:\/\/api-gw-toc\.zeekrlife\.com\/zeekrlife-mp-bnr\/open\/toc\/v1\/servicePage\/module\/query$ response-body-json-jq https://raw.githubusercontent.com/Rbubblee/About-Loon/main/Script/zeekr_service.jq
+; ============================================================================
+; Rewrite 策略 (基于 Loon 抓包验证的 API 路径):
+;
+;   [社区] container/page 中 tag=BBS+type=banner 的记录 = 社区顶部广告Banner
+;          bbs-theme 系列 API = 社区发现页/活动推荐/车友圈
+;          zeekrlife-h5 = 社区文章H5页面
+;
+;   [商城] halvie.com 系列域名 = 极物商城完整入口
+;
+;   [我的] container/page 中 tag=HAIBAO 的记录 = 个人页推广入口(达人招募/活动专区)
+;          touchpoint + im-web = 客服/服务入口(非必要中间模块)
+;
+;   [活动] activity-h5.zeekrlife.com = 千万注册/周年庆等营销H5
+;
+;   [追踪] 多个SDK端点 + 极氪自建遥测 = 隐私数据上报
+; ============================================================================
 
-# --- 社区内容：过滤 container/page 中的 BBS 内容 ---
-# 保留非 BBS 的页面内容（个人页、爱车页），只移除社区(BBS)容器
-^https?:\/\/api-gw-toc\.zeekrlife\.com\/zeekrlife-mp-bnr\/open\/v1\/container\/page$ response-body-json-jq https://raw.githubusercontent.com/Rbubblee/About-Loon/main/Script/zeekr_community.jq
+; --- 容器/页面配置 (核心入口) ---
+; 该API控制所有Tab页面的模块布局，通过JQ过滤移除广告容器
+; 请求体示例: {"records":["600d...","0375...",...],"vehicleModel":"CC1E-A1"}
+^https?:\/\/api-gw-toc\.zeekrlife\.com\/zeekrlife-mp-bnr\/open\/v1\/container\/page$ response-body-json-jq https://raw.githubusercontent.com/Rbubblee/About-Loon/main/Script/zeekr_community.jq, enable={blockCommunity}
+^https?:\/\/api-gw-toc\.zeekrlife\.com\/zeekrlife-mp-bnr\/open\/v1\/container\/page$ response-body-json-jq https://raw.githubusercontent.com/Rbubblee/About-Loon/main/Script/zeekr_service.jq, enable={blockProfile}
 
-# --- 社区BBS API / H5 页面：直接返回空字典 ---
-^https?:\/\/api-gw-toc\.zeekrlife\.com\/zeekrlife-bbs-theme\/.* reject-dict
-^https?:\/\/api-gw-toc\.zeekrlife\.com\/zeekrlife-mp-order\/v1\/posts\/.* reject-dict
-^https?:\/\/zeekrlife-h5\.zeekrlife\.com\/.* reject-dict
+; --- 社区 BBS API: 直接返回空字典 ---
+^https?:\/\/api-gw-toc\.zeekrlife\.com\/zeekrlife-bbs-theme\/.* reject-dict, enable={blockCommunity}
+^https?:\/\/api-gw-toc\.zeekrlife\.com\/zeekrlife-mp-order\/v1\/posts\/.* reject-dict, enable={blockCommunity}
+^https?:\/\/zeekrlife-h5\.zeekrlife\.com\/.* reject-dict, enable={blockCommunity}
 
-# --- 极物商城 ---
-^https?:\/\/zeekrlife-halvie-mall-uni-h5\.halvie\.com\/.* reject-dict
-^https?:\/\/zkmall-apigw\.halvie\.com\/.* reject-dict
+; --- 极物商城: 返回空字典 ---
+^https?:\/\/zeekrlife-halvie-mall-uni-h5\.halvie\.com\/.* reject-dict, enable={blockMall}
+^https?:\/\/zkmall-apigw\.halvie\.com\/.* reject-dict, enable={blockMall}
 
-# --- 客服/服务 ---
-^https?:\/\/touchpoint-api\.zeekrlife\.com\/.* reject-dict
-^https?:\/\/im-web\.zeekrlife\.com\/.* reject-dict
+; --- 客服/服务: 返回空字典 ---
+^https?:\/\/touchpoint-api\.zeekrlife\.com\/.* reject-dict, enable={blockProfile}
+^https?:\/\/im-web\.zeekrlife\.com\/.* reject-dict, enable={blockProfile}
 
-# --- 追踪端点 ---
-^https?:\/\/visitor\.zeekrlife\.com\/.* reject
-^https?:\/\/survey\.zeekrlife\.com\/.* reject
-^https?:\/\/obsv3\.zeekrlife\.com\/.* reject
+; --- 营销活动 H5: 返回空字典 ---
+^https?:\/\/activity-h5\.zeekrlife\.com\/.* reject-dict, enable={blockActivity}
 
-[MITM]
-hostname = *.sensorsdata.cn, *.sensorsdata.com, *.jpush.cn, *.jiguang.cn, *.volcengine.com, *.byteoversea.com, *.aliyuncs.com, *.bugly.qq.com, *.uc.cn, visitor.zeekrlife.com, survey.zeekrlife.com, obsv3.zeekrlife.com, zeekrlife-h5.zeekrlife.com, zeekrlife-halvie-mall-uni-h5.halvie.com, zkmall-apigw.halvie.com, touchpoint-api.zeekrlife.com, im-web.zeekrlife.com, api-gw-toc.zeekrlife.com
+; --- 营销消息 API: 返回空响应 ---
+^https?:\/\/api-gw-toc\.zeekrlife\.com\/zeekrlife-mp-mkt\/.* reject-dict, enable={blockActivity}
+
+; --- 埋点/日志上报: 静默REJECT ---
+^https?:\/\/api-gw-toc\.zeekrlife\.com\/zeekrlife-mp-alarm\/.* reject-dict, enable={blockTracking}
+^https?:\/\/api-gw-toc\.zeekrlife\.com\/haohan-data-collect\/.* reject-dict, enable={blockTracking}
+^https?:\/\/visitor\.zeekrlife\.com\/.* reject, enable={blockTracking}
+^https?:\/\/survey\.zeekrlife\.com\/.* reject, enable={blockTracking}
+^https?:\/\/obsv3\.zeekrlife\.com\/.* reject, enable={blockTracking}
+^https?:\/\/api-gw-toc\.zeekrlife\.com\/zeekrlife-mp-integral\/.* reject-dict, enable={blockTracking}
+
+[Script]
+; ============================================================================
+; 脚本扩展区 (预留)
+;
+; 当前已通过 [Rule] 域名阻断 + [Rewrite] JQ过滤 + reject-dict 覆盖全部需求。
+; 如后续发现新的广告形式 (如 Protobuf 编码的广告数据、需动态鉴权)，
+; 可参考 Sparkle 项目 (https://github.com/kokoryh/Sparkle) 编写 TS 脚本。
+;
+; 脚本引用示例:
+; http-response ^https:\/\/api-gw-toc\.zeekrlife\.com\/.*\/ad\/.*\? \
+;   script-path=https://raw.githubusercontent.com/Rbubblee/About-Loon/main/Script/zeekr_adblock.js, \
+;   requires-body=true, tag=zeekr.adblock, enable={blockCommunity}
+; ============================================================================
+
+[MitM]
+hostname = *.sensorsdata.cn, *.sensorsdata.com, *.jpush.cn, *.jiguang.cn, *.volcengine.com, *.byteoversea.com, *.aliyuncs.com, *.bugly.qq.com, *.uc.cn, visitor.zeekrlife.com, survey.zeekrlife.com, obsv3.zeekrlife.com, zeekrlife-h5.zeekrlife.com, zeekrlife-halvie-mall-uni-h5.halvie.com, zkmall-apigw.halvie.com, haowu-mp-oss.halvie.com, image-halvie.halvie.com, haowu-track-prod.cn-hangzhou.log.aliyuncs.com, touchpoint-api.zeekrlife.com, im-web.zeekrlife.com, api-gw-toc.zeekrlife.com, activity-h5.zeekrlife.com
