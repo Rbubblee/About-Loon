@@ -1,5 +1,5 @@
 #!name=极氪净化
-#!desc=极氪App去广告 - 屏蔽社区/商城入口+开屏弹窗+我的页面推广+追踪SDK
+#!desc=极氪App去广告 - 逐项精准屏蔽
 #!openUrl=https://apps.apple.com/app/id1572626106
 #!homepage=https://github.com/Rbubblee/About-Loon/blob/main/Plugin/Zeekr_remove_ads.lpx
 #!system=iOS,iPadOS
@@ -11,126 +11,23 @@
 #!date=2026-07-24
 
 [Argument]
-; ============================================================
-; 模块开关 - 每个功能独立控制
-; ============================================================
-blockCommunity=switch,true,tag=[社区]完全屏蔽社区入口(点击后空白)
-blockMall=switch,true,tag=[商城]完全屏蔽商城入口(点击后白屏)
-blockProfile=switch,true,tag=[我的]清除我的页面中间推广+客服入口
-blockPopup=switch,true,tag=[弹窗]屏蔽APP开屏弹窗+首页启动弹窗
-blockTracking=switch,true,tag=[追踪]屏蔽神策/极光/火山引擎等埋点上报
+; 逐个测试 - 默认全关, 验证通过再开
+blockPopup=switch,false,tag=[弹窗]屏蔽APP开屏弹窗
+blockCommunityBanner=switch,false,tag=[社区]移除社区顶部Banner广告
+blockCommunityContent=switch,false,tag=[社区]移除社区内容区
+blockMall=switch,false,tag=[商城]屏蔽极物商城
+blockProfileAds=switch,false,tag=[我的]移除我的页面推广条目
+blockTracking=switch,false,tag=[追踪]屏蔽第三方埋点上报
 logLevel=select,"error","warn","info","debug","off",tag=日志等级
 
 [Rule]
-; ============================================================
-; 说明: 极氪App底部导航栏(TabBar)是原生代码写死的,无法通过API移除Tab入口。
-; 本插件的策略是阻断目标Tab的全部网络请求,使其点击后空白/无法加载。
-;
-; 基于两次Loon抓包验证的API路径 (App版本 5.0.1~5.0.2):
-;   api-gw-toc.zeekrlife.com  = 主API网关
-;   gric-z-api.geely.com      = 车辆/Geely后端
-;   halvie.com                = 极物商城
-;   zeekrlife-h5              = 社区H5页面
-;   activity-h5               = 营销活动H5
-;   touchpoint-api            = 客服/服务
-; ============================================================
-
-; --- 追踪SDK域名 ---
-DOMAIN-SUFFIX,sensorsdata.cn,REJECT,enable={blockTracking}
-DOMAIN-SUFFIX,sensorsdata.com,REJECT,enable={blockTracking}
-DOMAIN-SUFFIX,jpush.cn,REJECT,enable={blockTracking}
-DOMAIN-SUFFIX,jiguang.cn,REJECT,enable={blockTracking}
-DOMAIN-SUFFIX,volcengine.com,REJECT,enable={blockTracking}
-DOMAIN-SUFFIX,byteoversea.com,REJECT,enable={blockTracking}
-DOMAIN-SUFFIX,aliyuncs.com,REJECT,enable={blockTracking}
-DOMAIN-SUFFIX,bugly.qq.com,REJECT,enable={blockTracking}
-DOMAIN-SUFFIX,uc.cn,REJECT,enable={blockTracking}
-DOMAIN-SUFFIX,visitor.zeekrlife.com,REJECT,enable={blockTracking}
-DOMAIN-SUFFIX,survey.zeekrlife.com,REJECT,enable={blockTracking}
-DOMAIN-SUFFIX,obsv3.zeekrlife.com,REJECT,enable={blockTracking}
-
-; --- 社区: 阻断社区H5域名 ---
-DOMAIN-SUFFIX,zeekrlife-h5.zeekrlife.com,REJECT,enable={blockCommunity}
-
-; --- 商城: 阻断极物商城域名 ---
-DOMAIN-SUFFIX,zeekrlife-halvie-mall-uni-h5.halvie.com,REJECT,enable={blockMall}
-DOMAIN-SUFFIX,zkmall-apigw.halvie.com,REJECT,enable={blockMall}
-DOMAIN-SUFFIX,haowu-mp-oss.halvie.com,REJECT,enable={blockMall}
-DOMAIN-SUFFIX,image-halvie.halvie.com,REJECT,enable={blockMall}
-DOMAIN-SUFFIX,haowu-track-prod.cn-hangzhou.log.aliyuncs.com,REJECT,enable={blockMall}
-
-; --- 客服/服务 (我的页面中间部分) ---
-DOMAIN-SUFFIX,touchpoint-api.zeekrlife.com,REJECT,enable={blockProfile}
-DOMAIN-SUFFIX,im-web.zeekrlife.com,REJECT,enable={blockProfile}
-
-; --- 营销活动H5 ---
-DOMAIN-SUFFIX,activity-h5.zeekrlife.com,REJECT,enable={blockPopup}
+; 待逐项添加
 
 [Rewrite]
-; ============================================================================
-; container/page API (核心):
-;   该API控制所有页面的模块布局。根据抓包数据,不同 record 请求不同 tag:
-;
-;   tag=BBS          → 社区顶部广告Banner + APP开屏弹窗 + 首页启动弹窗
-;   tag=BBS_MSG      → 社区内容区(美图/极速时氪/极氪出发/九宫格)
-;   tag=PARTNERLEAGUE → 极氪电台/合作伙伴
-;   tag=OVSERVICE    → 用车服务(保留)
-;   tag=HAIBAO       → 个人页推广入口
-;
-;   策略: JQ移除社区/广告tag, 保留用车服务
-; ============================================================================
-
-; --- 社区: 移除所有BBS/BBS_MSG/PARTNERLEAGUE容器 ---
-^https?:\/\/api-gw-toc\.zeekrlife\.com\/zeekrlife-mp-bnr\/open\/v1\/container\/page$ response-body-json-jq https://raw.githubusercontent.com/Rbubblee/About-Loon/main/Script/zeekr_community.jq, enable={blockCommunity}
-
-; --- 我的: 清理HAIBAO中的推广条目 ---
-^https?:\/\/api-gw-toc\.zeekrlife\.com\/zeekrlife-mp-bnr\/open\/v1\/container\/page$ response-body-json-jq https://raw.githubusercontent.com/Rbubblee/About-Loon/main/Script/zeekr_service.jq, enable={blockProfile}
-
-; --- 社区 BBS API 全系列阻断 ---
-; 这些是社区Tab加载时调用的API, reject-dict后页面将空白
-^https?:\/\/api-gw-toc\.zeekrlife\.com\/zeekrlife-bbs-theme\/.* reject-dict, enable={blockCommunity}
-^https?:\/\/api-gw-toc\.zeekrlife\.com\/zeekrlife-mp-order\/v1\/posts\/.* reject-dict, enable={blockCommunity}
-^https?:\/\/zeekrlife-h5\.zeekrlife\.com\/.* reject-dict, enable={blockCommunity}
-
-; --- 社区广场/发现页 ---
-^https?:\/\/api-gw-toc\.zeekrlife\.com\/zeekrlife-bbs-theme\/v1\/square\/.* reject-dict, enable={blockCommunity}
-^https?:\/\/api-gw-toc\.zeekrlife\.com\/zeekrlife-bbs-theme\/v1\/invitation\/.* reject-dict, enable={blockCommunity}
-^https?:\/\/api-gw-toc\.zeekrlife\.com\/zeekrlife-bbs-theme\/v1\/specialproject\/.* reject-dict, enable={blockCommunity}
-^https?:\/\/api-gw-toc\.zeekrlife\.com\/zeekrlife-bbs-theme\/v1\/discovery\/.* reject-dict, enable={blockCommunity}
-
-; --- 极物商城 API ---
-^https?:\/\/zeekrlife-halvie-mall-uni-h5\.halvie\.com\/.* reject-dict, enable={blockMall}
-^https?:\/\/zkmall-apigw\.halvie\.com\/.* reject-dict, enable={blockMall}
-
-; --- 客服/服务/IM ---
-^https?:\/\/touchpoint-api\.zeekrlife\.com\/.* reject-dict, enable={blockProfile}
-^https?:\/\/im-web\.zeekrlife\.com\/.* reject-dict, enable={blockProfile}
-
-; --- 营销活动H5 ---
-^https?:\/\/activity-h5\.zeekrlife\.com\/.* reject-dict, enable={blockPopup}
-
-; --- 营销消息 API ---
-^https?:\/\/api-gw-toc\.zeekrlife\.com\/zeekrlife-mp-mkt\/.* reject-dict, enable={blockPopup}
-
-; --- 埋点/日志上报 ---
-^https?:\/\/api-gw-toc\.zeekrlife\.com\/zeekrlife-mp-alarm\/.* reject-dict, enable={blockTracking}
-^https?:\/\/api-gw-toc\.zeekrlife\.com\/haohan-data-collect\/.* reject-dict, enable={blockTracking}
-^https?:\/\/visitor\.zeekrlife\.com\/.* reject, enable={blockTracking}
-^https?:\/\/survey\.zeekrlife\.com\/.* reject, enable={blockTracking}
-^https?:\/\/obsv3\.zeekrlife\.com\/.* reject, enable={blockTracking}
+; 待逐项添加
 
 [Script]
-; ============================================================================
-; 脚本扩展区 (预留)
-;
-; 当前已通过域名阻断 + API阻断 + JQ容器过滤 实现全部需求。
-; 如需更复杂的处理逻辑，可参考 Sparkle 项目编写 TS 脚本:
-;   https://github.com/kokoryh/Sparkle
-;
-; 注意: 极氪App的底部导航栏(TabBar)是原生代码,
-; Loon代理插件无法移除原生Tab入口,只能让目标Tab加载空白。
-; 如需真正隐藏底部Tab,需要越狱+App修改(Tweak注入)。
-; ============================================================================
+; 待逐项添加
 
 [MitM]
-hostname = *.sensorsdata.cn, *.sensorsdata.com, *.jpush.cn, *.jiguang.cn, *.volcengine.com, *.byteoversea.com, *.aliyuncs.com, *.bugly.qq.com, *.uc.cn, visitor.zeekrlife.com, survey.zeekrlife.com, obsv3.zeekrlife.com, zeekrlife-h5.zeekrlife.com, zeekrlife-halvie-mall-uni-h5.halvie.com, zkmall-apigw.halvie.com, haowu-mp-oss.halvie.com, image-halvie.halvie.com, haowu-track-prod.cn-hangzhou.log.aliyuncs.com, touchpoint-api.zeekrlife.com, im-web.zeekrlife.com, api-gw-toc.zeekrlife.com, activity-h5.zeekrlife.com
+hostname = api-gw-toc.zeekrlife.com, zeekrlife-h5.zeekrlife.com, zeekrlife-halvie-mall-uni-h5.halvie.com, zkmall-apigw.halvie.com, touchpoint-api.zeekrlife.com, im-web.zeekrlife.com, activity-h5.zeekrlife.com
