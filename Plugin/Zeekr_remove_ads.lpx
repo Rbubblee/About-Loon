@@ -1,5 +1,5 @@
 #!name=极氪净化
-#!desc=极氪App去广告 - 逐项精准屏蔽
+#!desc=极氪App去广告 - 所有开关独立可控
 #!openUrl=https://apps.apple.com/app/id1572626106
 #!homepage=https://github.com/Rbubblee/About-Loon/blob/main/Plugin/Zeekr_remove_ads.lpx
 #!system=iOS,iPadOS
@@ -11,99 +11,53 @@
 #!date=2026-07-28
 
 [Argument]
-; === 弹窗类 ===
 blockBrandCare=switch,true,tag=[弹窗]品牌关怀浮窗
-; === 社区类 ===
-blockCommunityBanner=switch,true,tag=[社区]顶部Banner广告(#4#5)
-blockCommunityContent=switch,true,tag=[社区]内容区模块(#6-10:美图/极速时氪/九宫格/电台)
-blockCommunityDiscovery=switch,true,tag=[社区]发现页活动推荐(#11#12)
-; === 首页类 ===
-blockHomepage=switch,true,tag=[首页]官方资讯+浩瀚能源+各分类模块(#13-15)
-; === 我的页面 ===
-blockProfileAds=switch,true,tag=[我的]主题专区限时开放(#18)
-; === 营销活动 ===
-blockActivityH5=switch,true,tag=[活动]活动H5页面(#26#27)
-blockMarketing=switch,true,tag=[活动]营销消息推送(#28-30)
-; === 商城 ===
-blockMall=switch,true,tag=[商城]极物商城(#31)
-; === 系统 ===
+blockCommunityBanner=switch,true,tag=[社区]顶部Banner广告
+blockCommunityContent=switch,true,tag=[社区]内容区(美图/九宫格/电台)
+blockCommunityDiscovery=switch,true,tag=[社区]发现页活动推荐
+blockHomepage=switch,true,tag=[首页]官方资讯+分类模块
+blockProfileAds=switch,true,tag=[我的]主题专区限时开放
+blockActivityH5=switch,true,tag=[活动]活动H5页面
+blockMarketing=switch,true,tag=[活动]营销消息推送
+blockMall=switch,true,tag=[商城]极物商城
 logLevel=select,"error","warn","info","debug","off",tag=日志等级
 
 [Rule]
-; === 营销活动H5 ===
-DOMAIN-SUFFIX,activity-h5.zeekrlife.com,REJECT,enable={blockActivityH5}
-
-; === 极物商城 ===
-DOMAIN-SUFFIX,zeekrlife-halvie-mall-uni-h5.halvie.com,REJECT,enable={blockMall}
-DOMAIN-SUFFIX,zkmall-apigw.halvie.com,REJECT,enable={blockMall}
-DOMAIN-SUFFIX,haowu-mp-oss.halvie.com,REJECT,enable={blockMall}
-DOMAIN-SUFFIX,image-halvie.halvie.com,REJECT,enable={blockMall}
-DOMAIN-SUFFIX,haowu-track-prod.cn-hangzhou.log.aliyuncs.com,REJECT,enable={blockMall}
+; 域名级阻断(始终生效, [Rule]不支持enable=)
+; 如需关闭, 可删掉对应行或注释掉
 
 [Rewrite]
-; ================================================================
-; 弹窗类
-; ================================================================
-
-; #3 品牌关怀浮窗 → isShow改为0
-^https?:\/\/api-gw-toc\.zeekrlife\.com\/zeekrlife-app-user\/anniversary\/2022\/open\/getBrandCare415Info$ response-body-json-jq '.data.isShow = 0' enable={blockBrandCare}
-
-; ================================================================
-; container/page - 社区 Banner + 我的页面 独立控制
-; ================================================================
-
-; #4#5 BBS广告Banner (推荐顶部banner + 新金刚位)
-^https?:\/\/api-gw-toc\.zeekrlife\.com\/zeekrlife-mp-bnr\/open\/v1\/container\/page$ response-body-json-jq 'if .data.records then .data.records |= map(select(.tag != "BBS")) else . end' enable={blockCommunityBanner}
-
-; #6-9 BBS_MSG内容区 (美图/极速时氪/极氪出发/九宫格) + #10 PARTNERLEAGUE电台
-^https?:\/\/api-gw-toc\.zeekrlife\.com\/zeekrlife-mp-bnr\/open\/v1\/container\/page$ response-body-json-jq 'if .data.records then .data.records |= map(select(.tag != "BBS_MSG" and .tag != "PARTNERLEAGUE")) else . end' enable={blockCommunityContent}
-
-; #18 我的页面 HAIBAO 中的"主题专区限时开放"推广入口
-^https?:\/\/api-gw-toc\.zeekrlife\.com\/zeekrlife-mp-bnr\/open\/v1\/container\/page$ response-body-json-jq 'if .data.records then .data.records |= map(if .tag == "HAIBAO" then .places |= map(select(.name != "主题专区限时开放")) else . end) else . end' enable={blockProfileAds}
-
-; ================================================================
-; 社区BBS API - 发现页活动推荐
-; ================================================================
-
-; #11 发现页活动推荐列表
-^https?:\/\/api-gw-toc\.zeekrlife\.com\/zeekrlife-bbs-theme\/v1\/discovery\/pub\/list\/activitySessionListWithRecommendationsV2$ reject-dict, enable={blockCommunityDiscovery}
-
-; #12 社区卡片推荐
-^https?:\/\/api-gw-toc\.zeekrlife\.com\/zeekrlife-bbs-theme\/toc\/v1\/srv\/card\/list$ reject-dict, enable={blockCommunityDiscovery}
-
-; ================================================================
-; 首页 - lowPage/getView 模块移除
-; ================================================================
-
-; #13-15 首页各模块 → 清空components数组
-^https?:\/\/api-gw-toc\.zeekrlife\.com\/zeekrlife-mp-bnr\/toc\/v1\/lowPage\/open\/getView$ response-body-json-jq '.data.components = []' enable={blockHomepage}
-
-; ================================================================
-; 营销消息API
-; ================================================================
-
-; #28 营销消息
-^https?:\/\/api-gw-toc\.zeekrlife\.com\/zeekrlife-mp-mkt\/toc\/v1\/applyV2\/baseMsg$ reject-dict, enable={blockMarketing}
-
-; #29 千万注册消息
-^https?:\/\/api-gw-toc\.zeekrlife\.com\/zeekrlife-mp-mkt\/toc\/v1\/applyExt\/millionRegisterMsg$ reject-dict, enable={blockMarketing}
-
-; #30 营销任务触达
-^https?:\/\/api-gw-toc\.zeekrlife\.com\/zeekrlife-mp-mkt\/toc\/v1\/taskV2\/outReach$ reject-dict, enable={blockMarketing}
-
-; ================================================================
-; 活动H5 + 商城 → URL级别reject-dict (配合[Rule]域名阻断)
-; ================================================================
-
-; #26#27 活动H5
-^https?:\/\/activity-h5\.zeekrlife\.com\/.* reject-dict, enable={blockActivityH5}
-
-; #31 极物商城
-^https?:\/\/zeekrlife-halvie-mall-uni-h5\.halvie\.com\/.* reject-dict, enable={blockMall}
-^https?:\/\/zkmall-apigw\.halvie\.com\/.* reject-dict, enable={blockMall}
+; 已全部移至[Script], 此段保留为空
 
 [Script]
-; 待逐项添加
+; ================================================================
+; 所有规则都在此段, 通过 enable={开关} 独立控制
+; ================================================================
+
+; --- 弹窗 ---
+http-response ^https?:\/\/api-gw-toc\.zeekrlife\.com\/zeekrlife-app-user\/anniversary\/2022\/open\/getBrandCare415Info$ script-path=https://raw.githubusercontent.com/Rbubblee/About-Loon/main/Script/zeekr_brandcare.js, requires-body=true, tag=zeekr.brandcare, enable={blockBrandCare}
+
+; --- 社区 container/page ---
+http-response ^https?:\/\/api-gw-toc\.zeekrlife\.com\/zeekrlife-mp-bnr\/open\/v1\/container\/page$ script-path=https://raw.githubusercontent.com/Rbubblee/About-Loon/main/Script/zeekr_community_banner.js, requires-body=true, tag=zeekr.community.banner, enable={blockCommunityBanner}
+http-response ^https?:\/\/api-gw-toc\.zeekrlife\.com\/zeekrlife-mp-bnr\/open\/v1\/container\/page$ script-path=https://raw.githubusercontent.com/Rbubblee/About-Loon/main/Script/zeekr_community_content.js, requires-body=true, tag=zeekr.community.content, enable={blockCommunityContent}
+http-response ^https?:\/\/api-gw-toc\.zeekrlife\.com\/zeekrlife-mp-bnr\/open\/v1\/container\/page$ script-path=https://raw.githubusercontent.com/Rbubblee/About-Loon/main/Script/zeekr_profile_ads.js, requires-body=true, tag=zeekr.profile.ads, enable={blockProfileAds}
+
+; --- 社区发现页 ---
+http-response ^https?:\/\/api-gw-toc\.zeekrlife\.com\/zeekrlife-bbs-theme\/v1\/discovery\/pub\/list\/activitySessionListWithRecommendationsV2$ script-path=https://raw.githubusercontent.com/Rbubblee/About-Loon/main/Script/zeekr_discovery.js, requires-body=true, tag=zeekr.discovery, enable={blockCommunityDiscovery}
+http-response ^https?:\/\/api-gw-toc\.zeekrlife\.com\/zeekrlife-bbs-theme\/toc\/v1\/srv\/card\/list$ script-path=https://raw.githubusercontent.com/Rbubblee/About-Loon/main/Script/zeekr_discovery.js, requires-body=true, tag=zeekr.cards, enable={blockCommunityDiscovery}
+
+; --- 首页 ---
+http-response ^https?:\/\/api-gw-toc\.zeekrlife\.com\/zeekrlife-mp-bnr\/toc\/v1\/lowPage\/open\/getView$ script-path=https://raw.githubusercontent.com/Rbubblee/About-Loon/main/Script/zeekr_homepage.js, requires-body=true, tag=zeekr.homepage, enable={blockHomepage}
+
+; --- 营销消息 ---
+http-response ^https?:\/\/api-gw-toc\.zeekrlife\.com\/zeekrlife-mp-mkt\/.*$ script-path=https://raw.githubusercontent.com/Rbubblee/About-Loon/main/Script/zeekr_marketing.js, requires-body=true, tag=zeekr.marketing, enable={blockMarketing}
+
+; --- 活动H5 (拦截请求) ---
+http-request ^https?:\/\/activity-h5\.zeekrlife\.com\/.*$ script-path=https://raw.githubusercontent.com/Rbubblee/About-Loon/main/Script/zeekr_activity_mall.js, requires-body=false, tag=zeekr.activity.h5, enable={blockActivityH5}
+
+; --- 极物商城 (拦截请求) ---
+http-request ^https?:\/\/zeekrlife-halvie-mall-uni-h5\.halvie\.com\/.*$ script-path=https://raw.githubusercontent.com/Rbubblee/About-Loon/main/Script/zeekr_activity_mall.js, requires-body=false, tag=zeekr.mall.h5, enable={blockMall}
+http-request ^https?:\/\/zkmall-apigw\.halvie\.com\/.*$ script-path=https://raw.githubusercontent.com/Rbubblee/About-Loon/main/Script/zeekr_activity_mall.js, requires-body=false, tag=zeekr.mall.api, enable={blockMall}
 
 [MitM]
 hostname = api-gw-toc.zeekrlife.com, activity-h5.zeekrlife.com, zeekrlife-halvie-mall-uni-h5.halvie.com, zkmall-apigw.halvie.com
