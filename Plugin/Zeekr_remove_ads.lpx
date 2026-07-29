@@ -17,7 +17,7 @@
 ^https?:\/\/api-gw-toc\.zeekrlife\.com\/zeekrlife-app-user\/anniversary\/2022\/open\/getBrandCare415Info$ response-body-json-jq '.data.isShow = 0'
 
 ; 模块2: 我的页面"主题专区限时开放" → 从HAIBAO容器中移除 (图片来自3692管理号)
-^https?:\/\/api-gw-toc\.zeekrlife\.com\/zeekrlife-mp-bnr\/open\/v1\/container\/page$ response-body-json-jq https://raw.githubusercontent.com/Rbubblee/About-Loon/main/Script/zeekr_service.jq
+^https?:\/\/api-gw-toc\.zeekrlife\.com\/zeekrlife-mp-bnr\/open\/v1\/container\/page$ response-body-json-jq 'if .data.records then .data.records |= map(if .tag == "HAIBAO" then .places |= map(select(.name != "主题专区限时开放")) else . end) else . end'
 
 [Script]
 ; 待逐项添加
