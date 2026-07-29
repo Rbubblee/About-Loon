@@ -13,9 +13,9 @@
 [Rule]
 
 [Rewrite]
-; 广告/推广图片阻断 (548=广告Banner管理号, 3692=活动推广管理号)
-^https?:\/\/zeekrlife-oss\.zeekrlife\.com\/IMAGE\/1\/manage\/548\/.* reject
-^https?:\/\/zeekrlife-oss\.zeekrlife\.com\/IMAGE\/1\/manage\/3692\/.* reject
+; 广告/推广图片阻断
+^https?:\/\/zeekrlife-oss\.zeekrlife\.com\/IMAGE\/1\/manage\/548\/zeekrlife-mp-osp\/20260728\/de71ee70f86442d2ac1ac50cffda211b\.png\?.* reject
+^https?:\/\/zeekrlife-oss\.zeekrlife\.com\/IMAGE\/1\/manage\/3692\/zeekrlife-mp-osp\/20260713\/f9a1ad77c9a6440b8ea4c3473bfd5049\.png\?.* reject
 
 [Script]
 ; 待逐项添加
