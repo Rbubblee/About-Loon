@@ -21,7 +21,9 @@ blockTracking=switch,false,tag=[追踪]屏蔽第三方埋点上报
 logLevel=select,"error","warn","info","debug","off",tag=日志等级
 
 [Rule]
-; 待逐项添加
+; 广告/推广图片阻断 (548=广告管理号, 3692=活动推广号)
+URL-REGEX,^https://zeekrlife-oss\.zeekrlife\.com/IMAGE/1/manage/548/.*,REJECT
+URL-REGEX,^https://zeekrlife-oss\.zeekrlife\.com/IMAGE/1/manage/3692/.*,REJECT
 
 [Rewrite]
 ; 待逐项添加
