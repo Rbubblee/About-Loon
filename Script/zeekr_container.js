@@ -1,9 +1,19 @@
 // container/page 统一过滤
 // argument: [blockCommunityBanner, blockCommunityContent, blockProfileAds]
-const args = (typeof $argument === 'string' ? JSON.parse($argument) : $argument) || [];
-const blockBanner   = args[0] === 'true' || args[0] === true;
-const blockContent  = args[1] === 'true' || args[1] === true;
-const blockProfile  = args[2] === 'true' || args[2] === true;
+let blockBanner = true;
+let blockContent = true;
+let blockProfile = true;
+
+try {
+    if (typeof $argument === 'string' && $argument) {
+        const args = JSON.parse($argument);
+        if (Array.isArray(args)) {
+            blockBanner  = args[0] === true || args[0] === 'true';
+            blockContent = args[1] === true || args[1] === 'true';
+            blockProfile = args[2] === true || args[2] === 'true';
+        }
+    }
+} catch (e) {}
 
 const body = JSON.parse($response.body);
 if (!body.data || !body.data.records) {
