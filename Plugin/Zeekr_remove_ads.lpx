@@ -14,8 +14,8 @@
 
 [Rewrite]
 ; 广告/推广图片阻断 → 返回1x1透明PNG
-^https?:\/\/zeekrlife-oss\.zeekrlife\.com\/IMAGE\/1\/manage\/548\/zeekrlife-mp-osp\/20260728\/de71ee70f86442d2ac1ac50cffda211b\.png\?.* mock-response-body data-type=image status-code=200 data="iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==" mock-data-is-base64=true
-^https?:\/\/zeekrlife-oss\.zeekrlife\.com\/IMAGE\/1\/manage\/3692\/zeekrlife-mp-osp\/20260713\/f9a1ad77c9a6440b8ea4c3473bfd5049\.png\?.* mock-response-body data-type=image status-code=200 data="iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==" mock-data-is-base64=true
+^https?:\/\/zeekrlife-oss\.zeekrlife\.com\/IMAGE\/1\/manage\/548\/zeekrlife-mp-osp\/20260728\/de71ee70f86442d2ac1ac50cffda211b\.png\?.* mock-response-body data-type=text status-code=200 data="iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==" mock-data-is-base64=true
+^https?:\/\/zeekrlife-oss\.zeekrlife\.com\/IMAGE\/1\/manage\/3692\/zeekrlife-mp-osp\/20260713\/f9a1ad77c9a6440b8ea4c3473bfd5049\.png\?.* mock-response-body data-type=text status-code=200 data="iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==" mock-data-is-base64=true
 
 [Script]
 ; 待逐项添加
