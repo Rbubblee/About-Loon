@@ -13,10 +13,9 @@
 [Rule]
 
 [Rewrite]
-; 广告/推广图片阻断 - 用reject-img返回透明图
-; 548=广告Banner管理号, 3692=活动推广管理号
-^https?:\/\/zeekrlife-oss\.zeekrlife\.com\/IMAGE\/1\/manage\/548\/.* reject-img
-^https?:\/\/zeekrlife-oss\.zeekrlife\.com\/IMAGE\/1\/manage\/3692\/.* reject-img
+; 广告/推广图片阻断 (548=广告Banner管理号, 3692=活动推广管理号)
+^https?:\/\/zeekrlife-oss\.zeekrlife\.com\/IMAGE\/1\/manage\/548\/.* reject
+^https?:\/\/zeekrlife-oss\.zeekrlife\.com\/IMAGE\/1\/manage\/3692\/.* reject
 
 [Script]
 ; 待逐项添加
