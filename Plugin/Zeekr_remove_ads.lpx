@@ -13,9 +13,11 @@
 [Rule]
 
 [Rewrite]
-; 广告/推广图片阻断 → 返回1x1透明PNG
-^https?:\/\/zeekrlife-oss\.zeekrlife\.com\/IMAGE\/1\/manage\/548\/zeekrlife-mp-osp\/20260728\/de71ee70f86442d2ac1ac50cffda211b\.png\?.* mock-response-body data-type=text status-code=200 data="iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==" mock-data-is-base64=true
-^https?:\/\/zeekrlife-oss\.zeekrlife\.com\/IMAGE\/1\/manage\/3692\/zeekrlife-mp-osp\/20260713\/f9a1ad77c9a6440b8ea4c3473bfd5049\.png\?.* mock-response-body data-type=text status-code=200 data="iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==" mock-data-is-base64=true
+; 模块1: 品牌关怀浮窗 → isShow改为0 (图片来自548管理号)
+^https?:\/\/api-gw-toc\.zeekrlife\.com\/zeekrlife-app-user\/anniversary\/2022\/open\/getBrandCare415Info$ response-body-json-jq '.data.isShow = 0'
+
+; 模块2: 我的页面"主题专区限时开放" → 从HAIBAO容器中移除 (图片来自3692管理号)
+^https?:\/\/api-gw-toc\.zeekrlife\.com\/zeekrlife-mp-bnr\/open\/v1\/container\/page$ response-body-json-jq https://raw.githubusercontent.com/Rbubblee/About-Loon/main/Script/zeekr_service.jq
 
 [Script]
 ; 待逐项添加
