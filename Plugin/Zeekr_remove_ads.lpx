@@ -8,28 +8,18 @@
 #!author=Rbubblee
 #!tag=去广告,极氪,Zeekr
 #!icon=https://is1-ssl.mzstatic.com/image/thumb/Purple211/v4/f8/a4/c3/f8a4c3f9-1569-d253-84ef-96c0c9eccc25/AppIcon-0-0-1x_U007epad-0-0-0-85-220.png/120x120bb.png
-#!date=2026-07-24
-
-[Argument]
-; 逐个测试 - 默认全关, 验证通过再开
-blockPopup=switch,false,tag=[弹窗]屏蔽APP开屏弹窗
-blockCommunityBanner=switch,false,tag=[社区]移除社区顶部Banner广告
-blockCommunityContent=switch,false,tag=[社区]移除社区内容区
-blockMall=switch,false,tag=[商城]屏蔽极物商城
-blockProfileAds=switch,false,tag=[我的]移除我的页面推广条目
-blockTracking=switch,false,tag=[追踪]屏蔽第三方埋点上报
-logLevel=select,"error","warn","info","debug","off",tag=日志等级
+#!date=2026-07-28
 
 [Rule]
-; 广告/推广图片阻断 (548=广告管理号, 3692=活动推广号)
-URL-REGEX,^https://zeekrlife-oss\.zeekrlife\.com/IMAGE/1/manage/548/.*,REJECT
-URL-REGEX,^https://zeekrlife-oss\.zeekrlife\.com/IMAGE/1/manage/3692/.*,REJECT
 
 [Rewrite]
-; 待逐项添加
+; 广告/推广图片阻断 - 用reject-img返回透明图
+; 548=广告Banner管理号, 3692=活动推广管理号
+^https?:\/\/zeekrlife-oss\.zeekrlife\.com\/IMAGE\/1\/manage\/548\/.* reject-img
+^https?:\/\/zeekrlife-oss\.zeekrlife\.com\/IMAGE\/1\/manage\/3692\/.* reject-img
 
 [Script]
 ; 待逐项添加
 
 [MitM]
-hostname = api-gw-toc.zeekrlife.com, zeekrlife-h5.zeekrlife.com, zeekrlife-halvie-mall-uni-h5.halvie.com, zkmall-apigw.halvie.com, touchpoint-api.zeekrlife.com, im-web.zeekrlife.com, activity-h5.zeekrlife.com
+hostname = api-gw-toc.zeekrlife.com, zeekrlife-oss.zeekrlife.com, zeekrlife-h5.zeekrlife.com, zeekrlife-halvie-mall-uni-h5.halvie.com, zkmall-apigw.halvie.com, touchpoint-api.zeekrlife.com, im-web.zeekrlife.com, activity-h5.zeekrlife.com
