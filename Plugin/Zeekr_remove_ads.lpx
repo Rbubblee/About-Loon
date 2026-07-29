@@ -37,10 +37,8 @@ logLevel=select,"error","warn","info","debug","off",tag=日志等级
 ; --- 弹窗 ---
 http-response ^https?:\/\/api-gw-toc\.zeekrlife\.com\/zeekrlife-app-user\/anniversary\/2022\/open\/getBrandCare415Info$ script-path=https://raw.githubusercontent.com/Rbubblee/About-Loon/main/Script/zeekr_brandcare.js, requires-body=true, tag=zeekr.brandcare, enable={blockBrandCare}
 
-; --- 社区 container/page ---
-http-response ^https?:\/\/api-gw-toc\.zeekrlife\.com\/zeekrlife-mp-bnr\/open\/v1\/container\/page$ script-path=https://raw.githubusercontent.com/Rbubblee/About-Loon/main/Script/zeekr_community_banner.js, requires-body=true, tag=zeekr.community.banner, enable={blockCommunityBanner}
-http-response ^https?:\/\/api-gw-toc\.zeekrlife\.com\/zeekrlife-mp-bnr\/open\/v1\/container\/page$ script-path=https://raw.githubusercontent.com/Rbubblee/About-Loon/main/Script/zeekr_community_content.js, requires-body=true, tag=zeekr.community.content, enable={blockCommunityContent}
-http-response ^https?:\/\/api-gw-toc\.zeekrlife\.com\/zeekrlife-mp-bnr\/open\/v1\/container\/page$ script-path=https://raw.githubusercontent.com/Rbubblee/About-Loon/main/Script/zeekr_profile_ads.js, requires-body=true, tag=zeekr.profile.ads, enable={blockProfileAds}
+; --- 社区 container/page (三合一, 脚本内根据argument值判断过滤什么) ---
+http-response ^https?:\/\/api-gw-toc\.zeekrlife\.com\/zeekrlife-mp-bnr\/open\/v1\/container\/page$ script-path=https://raw.githubusercontent.com/Rbubblee/About-Loon/main/Script/zeekr_container.js, requires-body=true, tag=zeekr.container, argument=[{blockCommunityBanner},{blockCommunityContent},{blockProfileAds}]
 
 ; --- 社区发现页 ---
 http-response ^https?:\/\/api-gw-toc\.zeekrlife\.com\/zeekrlife-bbs-theme\/v1\/discovery\/pub\/list\/activitySessionListWithRecommendationsV2$ script-path=https://raw.githubusercontent.com/Rbubblee/About-Loon/main/Script/zeekr_discovery.js, requires-body=true, tag=zeekr.discovery, enable={blockCommunityDiscovery}
