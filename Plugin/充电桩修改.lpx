@@ -1,0 +1,30 @@
+#!name=充电桩修改
+#!desc=极氪App家充桩页面改道吉利银河家充桩接口，展示银河账号绑定的家桩数据（查看/管理类）。首次使用请开启MITM，并先打开一次银河App家充桩页以自动保存token（约30分钟有效）。
+#!homepage=https://github.com/Rbubblee/About-Loon/blob/main/Plugin/充电桩修改.lpx
+#!system=iOS,iPadOS
+#!system_version=15
+#!loon_version=3.3.8(932)
+#!author=Rbubblee
+#!tag=充电桩,家充桩,Zeekr,极氪,吉利银河
+#!icon=https://raw.githubusercontent.com/luestr/IconResource/main/App_icon/120px/EasyCharge.png
+#!date=2026-08-07
+
+[Argument]
+enableRewrite=switch,true,tag=启用极氪→银河接口改道
+captureToken=switch,true,tag=自动保存银河token(需先打开一次银河App)
+
+[Script]
+; 极氪家充桩H5 设备列表 -> 银河recharge API（请求体/头改写 + 银河签名注入）
+http-request ^https:\/\/sea-home-prod\.haohanpower\.tech\/app\/equipment\/v2\/manage\/getMyEquipments$ script-path=https://raw.githubusercontent.com/Rbubblee/About-Loon/main/Script/charge_zeekr2galaxy.js, requires-body=true, timeout=10, tag=charge.zeekr2galaxy, enable={enableRewrite}
+; 极氪家充桩H5 其他业务接口（深层页面，绑定桩后抓包补齐映射）
+http-request ^https:\/\/sea-home-prod\.haohanpower\.tech\/app\/(?!equipment\/v2\/manage\/getMyEquipments$)(equipment|workorder|gep)\/.*$ script-path=https://raw.githubusercontent.com/Rbubblee/About-Loon/main/Script/charge_zeekr2galaxy.js, requires-body=true, timeout=10, tag=charge.zeekr2galaxy.deep, enable={enableRewrite}
+
+; 监听银河App token 换发，自动保存 rechargeToken/userId/refreshToken
+http-response ^https:\/\/api-recharge\.geely\.com\/gep\/v2\/common\/getTokenByCode$ script-path=https://raw.githubusercontent.com/Rbubblee/About-Loon/main/Script/charge_capture_token.js, requires-body=true, timeout=10, tag=charge.capture.token, enable={captureToken}
+http-response ^https:\/\/api-recharge\.geely\.com\/gep\/v2\/common\/getUserInfoByToken$ script-path=https://raw.githubusercontent.com/Rbubblee/About-Loon/main/Script/charge_capture_token.js, requires-body=true, timeout=10, tag=charge.capture.user, enable={captureToken}
+
+; 给改道后的银河API响应补CORS头（浏览器同源校验必需，建议保持开启）
+http-response ^https:\/\/api-recharge\.geely\.com\/.*$ script-path=https://raw.githubusercontent.com/Rbubblee/About-Loon/main/Script/charge_galaxy_cors.js, requires-body=false, timeout=10, tag=charge.cors
+
+[MitM]
+hostname = sea-home-prod.haohanpower.tech, api-recharge.geely.com
