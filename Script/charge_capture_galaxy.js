@@ -53,6 +53,12 @@ function pass() {
 }
 
 try {
+  // 调试页（charge_debug_page.js）发出的请求：只透传+补CORS，不缓存、不通知，
+  // 避免调试流量被当成银河App流量产生干扰
+  if (String(($request.headers || {})["x-debug-page"] || "") === "1") {
+    pass();
+    return;
+  }
   var url = $request.url || "";
   var path = url.replace(/^https?:\/\/[^/]+/, "").split("?")[0];
   var key = MAP[path];

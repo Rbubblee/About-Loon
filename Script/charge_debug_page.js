@@ -309,6 +309,14 @@ function addCard(ep, statusText, bodyText, isOk) {
   document.getElementById("results").appendChild(div);
 }
 
+function addTip(text) {
+  var tip = document.createElement("div");
+  tip.className = "tip";
+  tip.textContent = text;
+  var results = document.getElementById("results");
+  results.insertBefore(tip, results.firstChild);
+}
+
 function escapeHtml(s) {
   return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
@@ -320,6 +328,7 @@ async function callOne(ep) {
   }
   var bodyStr = JSON.stringify(ep.body());
   var headers = signRecharge("POST", ep.path, bodyStr, token);
+  headers["x-debug-page"] = "1";
   var t0 = Date.now();
   try {
     var res = await fetch(API_HOST + ep.path, { method: "POST", headers: headers, body: bodyStr });
@@ -328,6 +337,9 @@ async function callOne(ep) {
     var j = null;
     try { j = JSON.parse(text); } catch (e) {}
     var isOk = res.status === 200 && j && (j.code === "0" || j.code === 0 || j.code === "success");
+    if (j && (j.code === "999" || j.code === 999)) {
+      addTip("检测到 token 失效（code 999）：请打开银河 App 家充桩页刷新 token，然后重新加载本页。");
+    }
     if (ep.after && j) { try { ep.after(j); } catch (e) {} }
     addCard(ep, "HTTP " + res.status + " · " + ms + "ms · " + (isOk ? "SUCCESS" : "FAIL"), text, isOk);
     return isOk;
