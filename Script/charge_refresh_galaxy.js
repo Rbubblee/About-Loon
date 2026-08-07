@@ -6,8 +6,10 @@
 // v1.2：去掉签名头里的 Host（App 抓包为 HTTP/2，本就不带 Host 头，
 //       避免 Loon 客户端对显式 Host 的额外处理）；开头加一次百度连通性自检，
 //       用于区分"Loon 网络不可用"与"仅 api-recharge 被拦"。
-// 配合插件 v5.2：捕获脚本规则已收窄到 token 接口，业务接口的 cron 请求
-// 不再命中 http-response 规则（Loon 防循环机制是根因）。
+// 注意：2026-08-07 实测发现 baidu 连通性自检同样失败（err=null），
+// 说明根因是 Loon 脚本网络层在当前设备/版本整体不可用（与 MITM、规则无关）。
+// 本脚本的实时刷新能力依赖 Loon 脚本网络恢复正常；在此之前由
+// charge_capture_galaxy.js（打开银河App时缓存）保证注入数据可用。
 // token 由 charge_capture_galaxy.js 在银河App打开时抓取
 // （约 30 分钟有效，过期后本脚本自动停刷并保留旧缓存）。
 //
