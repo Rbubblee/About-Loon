@@ -1,5 +1,5 @@
 // ============================================================
-// charge_inject_zeekr.js  v7.0（纯响应注入，零网络）
+// charge_inject_zeekr.js  v7.3（纯响应注入，零网络）
 // 极氪家充桩的设备类接口（sea-home-prod /app/equipment/*）无论原生还是
 // WebView 发出，统一把响应替换为银河数据（缓存 gx_<key> / 内置种子 / 合成）。
 //
@@ -18,9 +18,18 @@
 // 依赖：charge_capture_galaxy.js 保存 token/userId/业务数据（打开银河App时刷新）；
 //       charge_refresh_galaxy.js 每 30s 用原生签名刷新 gx_<key>。
 // 降级：无缓存时回退内置种子数据；无映射接口弹通知（把路径发回补映射）。
+//
+// v7.3（实验模式，enableMinimal）：只注入"桩基本参数"——设备列表 getMyEquipments
+// （桩编码/providerNo/isOwner 等）与绑定判断 checkBindMyEquipment（isNeedBlueSk=0），
+// 其余设备类接口（详情/卡片/记录/扩展信息…）一律放行给极氪真实后端，验证浩瀚
+// 底层数据跨品牌是否原生可用（startCharge 实测真实后端能建单成功）。
 // ============================================================
 
 var NOTIFY = String(($argument || [])[0]) !== "false";
+var MINIMAL = String(($argument || [])[1]) !== "false";
+
+// 实验模式允许注入的接口（桩基本参数）
+var MINIMAL_KEYS = { "getMyEquipments": 1, "checkBindMyEquipment": 1 };
 
 var RECHARGE_KEY = "204195485";
 var RECHARGE_SECRET = "CqPwP83wzdjesmLeDuzK6SljsYN5PvRM";
@@ -280,6 +289,13 @@ try {
   if (!rule) {
     console.log("[charge] 未映射极氪接口: " + path);
     if (NOTIFY) $notification.post("充电桩修改：未映射接口", path + "（把这条发给我，我来加映射）", "");
+    $done({});
+    return;
+  }
+
+  // 实验模式：只注入桩基本参数，其余放行给极氪真实后端
+  if (MINIMAL && !MINIMAL_KEYS[rule.key]) {
+    console.log("[charge] 实验模式放行（仅注入基本参数）: " + path);
     $done({});
     return;
   }
