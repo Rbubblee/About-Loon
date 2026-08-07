@@ -25,27 +25,27 @@ var MAP = {
 };
 
 function pass() {
-  // 给银河响应补 CORS 头（改道后浏览器跨域校验需要）
+  // 给银河响应补 CORS 头（改道后浏览器跨域校验需要）。
+  // 改道请求已不带 Origin（否则网关 403 Invalid CORS request），
+  // 所以这里无条件补上极氪 H5 的允许来源。
   try {
     var reqHeaders = $request.headers || {};
-    var origin = String(reqHeaders["origin"] || "");
-    if (origin) {
-      var hdrs = $response.headers || {};
-      hdrs["access-control-allow-origin"] = origin;
-      hdrs["access-control-allow-credentials"] = "true";
-      hdrs["access-control-expose-headers"] = "*";
-      hdrs["vary"] = "Origin";
-      $done({
-        response: {
-          status: $response.status || 200,
-          headers: hdrs,
-          body: $response.body || ""
-        }
-      });
-      return;
-    }
-  } catch (e) {}
-  $done({});
+    var origin = String(reqHeaders["origin"] || "https://c-h5-prod.haohanpower.tech");
+    var hdrs2 = $response.headers || {};
+    hdrs2["access-control-allow-origin"] = origin;
+    hdrs2["access-control-allow-credentials"] = "true";
+    hdrs2["access-control-expose-headers"] = "*";
+    hdrs2["vary"] = "Origin";
+    $done({
+      response: {
+        status: $response.status || 200,
+        headers: hdrs2,
+        body: $response.body || ""
+      }
+    });
+  } catch (e2) {
+    $done({});
+  }
 }
 
 try {

@@ -292,8 +292,9 @@ try {
 
   var bodyStr = JSON.stringify(rule.build(userId, eqId, provider, srcBody));
   var headers = signRecharge("POST", rule.path, bodyStr, token);
-  // 保留浏览器 Origin，供 charge_capture_galaxy.js 回写 Access-Control-Allow-Origin
-  headers["Origin"] = String(reqHeaders["origin"] || "https://c-h5-prod.haohanpower.tech");
+  // 注意：不能带 Origin 头！银河网关自带 CORS 校验，带极氪的 Origin 会返回
+  // 403 "Invalid CORS request"。去掉 Origin 后网关把它当原生 App 请求处理。
+  // CORS 响应头由 charge_capture_galaxy.js 在响应阶段无条件补上。
   console.log("[charge] 改道 " + path + " -> " + rule.path);
   if (NOTIFY) {
     var notified = $persistentStore.read("galaxyRedirectNotified") || "";
