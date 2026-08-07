@@ -1,5 +1,5 @@
 #!name=充电桩修改
-#!desc=极氪App家充桩页面显示银河家充桩数据（v7.1：新增银河接口调试页，浏览器打开 h5-recharge.geely.com/debug-galaxy 可验证改道数据链路；v7.0 修复"点击桩进绑定页"）。建议先打开一次银河App家充桩页以获取token。
+#!desc=极氪App家充桩页面显示银河家充桩数据（v7.2：实时模式——极氪H5页面内通过白名单域名中继实时拉取银河数据，替代缓存注入；v7.1 调试页；v7.0 修复"点击桩进绑定页"）。建议先打开一次银河App家充桩页以获取token。
 #!homepage=https://github.com/Rbubblee/About-Loon/blob/main/Plugin/充电桩修改.lpx
 #!system=iOS,iPadOS
 #!system_version=15
@@ -16,6 +16,7 @@ captureData=switch,true,tag=打开银河App时自动缓存最新数据
 autoRefresh=switch,true,tag=每30秒自动刷新银河数据（准实时）
 notify=switch,true,tag=注入/缓存时弹通知
 enableDebug=switch,true,tag=银河接口调试页（浏览器打开 h5-recharge.geely.com/debug-galaxy）
+enableLive=switch,true,tag=实时模式：极氪H5页面内实时拉取银河数据（需token有效）
 
 [Script]
 ; 改道：极氪H5家充桩设备接口 -> 银河接口（原生签名+token，每次请求都是实时数据，无需脚本网络）
@@ -24,6 +25,12 @@ http-request ^https:\/\/sea-home-prod\.haohanpower\.tech\/app\/equipment\/.*$ sc
 http-response ^https:\/\/sea-home-prod\.haohanpower\.tech\/app\/equipment\/.*$ script-path=https://raw.githubusercontent.com/Rbubblee/About-Loon/main/Script/charge_inject_zeekr.js, requires-body=true, timeout=10, tag=charge.inject, enable={enableInject}, argument=[{notify}]
 ; 银河接口调试页：挂在 h5-recharge.geely.com 下（该 Origin 被银河网关 CORS 白名单放行）
 http-response ^https:\/\/h5-recharge\.geely\.com\/debug-galaxy.*$ script-path=https://raw.githubusercontent.com/Rbubblee/About-Loon/main/Script/charge_debug_page.js, requires-body=true, timeout=10, tag=charge.debug, enable={enableDebug}, argument=[{notify}]
+; 实时模式：中继页（白名单域名，处理极氪H5转发来的实时请求）
+http-response ^https:\/\/h5-recharge\.geely\.com\/wallbox-relay.*$ script-path=https://raw.githubusercontent.com/Rbubblee/About-Loon/main/Script/charge_live_relay.js, requires-body=true, timeout=10, tag=charge.live.relay, enable={enableLive}
+; 实时模式：客户端脚本（注入极氪H5，拦截设备类请求转发给中继页）
+http-response ^https:\/\/h5-recharge\.geely\.com\/wallbox-client\.js.*$ script-path=https://raw.githubusercontent.com/Rbubblee/About-Loon/main/Script/charge_live_client.js, requires-body=true, timeout=10, tag=charge.live.client, enable={enableLive}
+; 实时模式：向极氪H5 HTML 注入客户端脚本（只处理 HTML，其余资源放行）
+http-response ^https:\/\/c-h5-prod\.haohanpower\.tech\/wallbox-sdk\/zeekr\/.*$ script-path=https://raw.githubusercontent.com/Rbubblee/About-Loon/main/Script/charge_live_inject.js, requires-body=true, timeout=10, tag=charge.live.inject, enable={enableLive}, argument=[{notify}]
 ; 抓取银河App token/userId/业务数据并缓存 + 给银河响应补CORS头（改道后浏览器跨域需要）
 http-response ^https:\/\/api-recharge\.geely\.com\/.*$ script-path=https://raw.githubusercontent.com/Rbubblee/About-Loon/main/Script/charge_capture_galaxy.js, requires-body=true, timeout=10, tag=charge.capture, enable={captureData}, argument=[{notify}]
 ; 定时刷新：每30秒用原生签名拉取银河实时数据写入缓存（无需打开银河App，token有效期内持续）
@@ -32,4 +39,4 @@ cron "*/30 * * * * *" script-path=https://raw.githubusercontent.com/Rbubblee/Abo
 generic script-path=https://raw.githubusercontent.com/Rbubblee/About-Loon/main/Script/charge_refresh_galaxy.js, tag=charge.manual, img-url=bolt.fill, enable={autoRefresh}
 
 [MitM]
-hostname = sea-home-prod.haohanpower.tech, api-recharge.geely.com, h5-recharge.geely.com
+hostname = sea-home-prod.haohanpower.tech, api-recharge.geely.com, h5-recharge.geely.com, c-h5-prod.haohanpower.tech
