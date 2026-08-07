@@ -1,10 +1,11 @@
 // ============================================================
-// charge_capture_galaxy.js  v2
+// charge_capture_galaxy.js  v3
 // 监听银河App的 api-recharge 流量：
 //   1. getTokenByCode  → 保存 authToken / refreshToken / 过期时间
 //   2. getUserInfoByToken → 保存 userId
 //   3. 家充桩业务接口   → 缓存响应（gx_<key>，供实时失败时降级）
-// 打开银河App家充桩页面时自动刷新，供 charge_inject_zeekr.js 使用。
+//   4. 所有响应补 CORS 头（改道后浏览器需要，charge_redirect_zeekr.js 使用）
+// 打开银河App家充桩页面时自动刷新，供 charge_inject_zeekr.js / charge_redirect_zeekr.js 使用。
 // ============================================================
 
 var NOTIFY = String(($argument || [])[0]) !== "false";
@@ -23,6 +24,30 @@ var MAP = {
   "/sim/v1/netflow/generateRenewUrl": "generateRenewUrl"
 };
 
+function pass() {
+  // 给银河响应补 CORS 头（改道后浏览器跨域校验需要）
+  try {
+    var reqHeaders = $request.headers || {};
+    var origin = String(reqHeaders["origin"] || "");
+    if (origin) {
+      var hdrs = $response.headers || {};
+      hdrs["access-control-allow-origin"] = origin;
+      hdrs["access-control-allow-credentials"] = "true";
+      hdrs["access-control-expose-headers"] = "*";
+      hdrs["vary"] = "Origin";
+      $done({
+        response: {
+          status: $response.status || 200,
+          headers: hdrs,
+          body: $response.body || ""
+        }
+      });
+      return;
+    }
+  } catch (e) {}
+  $done({});
+}
+
 try {
   var url = $request.url || "";
   var path = url.replace(/^https?:\/\/[^/]+/, "").split("?")[0];
@@ -33,7 +58,7 @@ try {
     j = JSON.parse(body);
   } catch (e) {}
   if (!j || (j.code !== "0" && j.code !== 0 && j.code !== "success")) {
-    $done({});
+    pass();
     return;
   }
 
@@ -46,9 +71,9 @@ try {
       var expiresAt = (typeof expire === "number" && expire > 1000000000) ? expire : now + (typeof expire === "number" ? expire : 1799);
       $persistentStore.write(String(expiresAt), "galaxyTokenExpiresAt");
       if (d.refreshToken) $persistentStore.write(d.refreshToken, "galaxyRefreshToken");
-      console.log("[charge] 已保存 rechargeToken，约 " + Math.round((expiresAt - now) / 60) + " 分钟有效");
-      if (NOTIFY) $notification.post("充电桩修改：银河token已更新", "约 " + Math.round((expiresAt - now) / 60) + " 分钟有效", "");
-    }
+    console.log("[charge] 已保存 rechargeToken，约 " + Math.round((expiresAt - now) / 60) + " 分钟有效");
+    if (NOTIFY) $notification.post("充电桩修改：银河token已更新", "约 " + Math.round((expiresAt - now) / 60) + " 分钟有效", "");
+  }
   } else if (key === "getUserInfoByToken") {
     if (d.userId) $persistentStore.write(String(d.userId), "galaxyUserId");
   } else if (key) {
@@ -66,4 +91,4 @@ try {
   }
 } catch (e) {}
 
-$done({});
+pass();
