@@ -348,11 +348,28 @@ async function loadGeetest() {
   window.initGeetest({
     captchaId: CAPTCHA_ID,
     product: "bind",
+    protocol: "https://",
     apiServers: apiServers,
-    staticServers: staticServers
+    staticServers: staticServers,
+    clientType: "h5",
+    hideBar: []
   }, function (captchaObj) {
     geetestReady = true;
-    try { captchaObj.appendTo($("geetest-wrap")); } catch (e) {}
+    try { captchaObj.appendTo(document.body); } catch (e) {}
+    // bind 模式下必须手动触发 verify()/showBox() 滑块才会弹出
+    var triggered = false;
+    var doVerify = function () {
+      if (triggered) { return; }
+      triggered = true;
+      try {
+        if (typeof captchaObj.verify === "function") { captchaObj.verify(); }
+        else if (typeof captchaObj.showBox === "function") { captchaObj.showBox(); }
+        else if (typeof captchaObj.showCaptcha === "function") { captchaObj.showCaptcha(); }
+      } catch (e) { showMsg("触发滑块异常：" + (e && e.message ? e.message : String(e)), "err"); }
+    };
+    if (typeof captchaObj.onReady === "function") { captchaObj.onReady(doVerify); }
+    // 兜底：部分 SDK 版本不触发 onReady
+    setTimeout(doVerify, 1200);
     captchaObj.onSuccess(function () {
       var r = captchaObj.getValidate();
       if (!r) { showMsg("滑块未返回验证结果", "err"); return; }
