@@ -102,6 +102,7 @@ function b64encode(bytes) {
 // ---------------- 配置 ----------------
 var GALAXY_TOKEN = $persistentStore.read("galaxyRechargeToken") || "";
 var GALAXY_USER_ID = $persistentStore.read("galaxyUserId") || "";
+var NOTIFY = String(($argument || [])[0]) !== "false";
 var XCA_KEY = "204184054";
 var XCA_SECRET = "Vxn15X98DNxNkI5UHvmtliqxPDvTeMBV";
 
@@ -221,6 +222,13 @@ try {
   };
 
   console.log("[charge] 改道 " + path + " -> " + rule.target + " 签名=" + s.xCaSignature);
+  if (NOTIFY) {
+    $notification.post(
+      "充电桩修改：改道成功",
+      "极氪家充桩请求已改道到银河接口（" + rule.target + "）",
+      ""
+    );
+  }
   $done({
     url: "https://api-recharge.geely.com" + rule.target,
     method: method,
