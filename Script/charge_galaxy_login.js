@@ -435,6 +435,11 @@ $("btnLogin").onclick = async function () {
     authExpiresAt: authExp,
     refreshExpiresAt: refreshExp
   });
+  // 同步写入中继/调试页读取的键
+  try {
+    localStorage.setItem("dbg_token", d.authToken);
+    localStorage.setItem("dbg_user_id", glUserId);
+  } catch (e) {}
   // 把 token 写入 Loon（与打开银河App等效）
   try {
     await fetch("https://h5-recharge.geely.com/store-token", {

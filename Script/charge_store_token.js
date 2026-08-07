@@ -3,8 +3,9 @@
 //
 // 银河网页登录页（charge_galaxy_login.js）完成 getTokenByCode 后，
 // 把 token 信息 POST 到 https://h5-recharge.geely.com/store-token
-// （同源请求），本脚本读取请求体并写入 persistentStore，与打开银河App
-// 时 charge_capture_galaxy.js 写入的键完全一致。
+// （同源请求；h5-recharge 返回 404，本 http-response 脚本接管）。
+// 脚本读取请求体写入 persistentStore，与打开银河App 时
+// charge_capture_galaxy.js 写入的键完全一致。
 // ============================================================
 
 // ---------------- 主流程 ----------------
@@ -25,14 +26,14 @@ try {
   } else {
     console.log("[charge] store-token 请求体无效: " + String(body).slice(0, 120));
   }
-  $done({
-    response: {
-      status: 200,
-      headers: { "content-type": "application/json; charset=utf-8" },
-      body: '{"ok":true}'
-    }
-  });
+  var headers0 = $response.headers || {};
+  headers0["content-type"] = "application/json; charset=utf-8";
+  delete headers0["content-encoding"];
+  delete headers0["Content-Encoding"];
+  delete headers0["content-length"];
+  delete headers0["Content-Length"];
+  $done({ status: 200, headers: headers0, body: '{"ok":true}' });
 } catch (e) {
   console.log("[charge] store-token 错误: " + (e && e.message ? e.message : String(e)));
-  $done({ response: { status: 200, headers: { "content-type": "application/json" }, body: '{"ok":false}' } });
+  $done({});
 }

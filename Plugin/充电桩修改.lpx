@@ -1,5 +1,5 @@
 #!name=充电桩修改
-#!desc=极氪App家充桩页面显示银河家充桩数据（v7.5：同源代理——登录页/调试页/中继页全部走 h5-recharge.geely.com 的 galaxy-gw/recharge-gw 本地路径，由Loon改写为真实网关，绕开浏览器CORS 403；v7.4 网页登录页）。建议先打开一次银河App或使用网页登录获取token。
+#!desc=极氪App家充桩页面显示银河家充桩数据（v7.6：同源代理改用Loon原生URL Rewrite，解决http-request脚本未生效导致404；token落库改用http-response）。建议先打开一次银河App或使用网页登录获取token。
 #!homepage=https://github.com/Rbubblee/About-Loon/blob/main/Plugin/充电桩修改.lpx
 #!system=iOS,iPadOS
 #!system_version=15
@@ -22,10 +22,8 @@ enableLogin=switch,true,tag=银河账号网页登录页（浏览器打开 h5-rec
 enableGwRelay=switch,true,tag=同源代理（登录页/调试页/中继页必需，勿关）
 
 [Script]
-; 同源代理：galaxy-gw -> galaxy-user-api，recharge-gw -> api-recharge（页面无Origin直接命中，绕开网关CORS 403）
-http-request ^https:\/\/h5-recharge\.geely\.com\/(galaxy-gw|recharge-gw)\/.*$ script-path=https://raw.githubusercontent.com/Rbubblee/About-Loon/main/Script/charge_gw_relay.js, requires-body=true, timeout=10, tag=charge.gw.relay, enable={enableGwRelay}
-; 网页登录成功后把 token 写入 Loon persistentStore
-http-request ^https:\/\/h5-recharge\.geely\.com\/store-token.*$ script-path=https://raw.githubusercontent.com/Rbubblee/About-Loon/main/Script/charge_store_token.js, requires-body=true, timeout=10, tag=charge.store.token, enable={enableLogin}
+; 网页登录成功后把 token 写入 Loon persistentStore（用 http-response，请求发到 h5-recharge 的 404，由脚本替换响应并读取请求体）
+http-response ^https:\/\/h5-recharge\.geely\.com\/store-token.*$ script-path=https://raw.githubusercontent.com/Rbubblee/About-Loon/main/Script/charge_store_token.js, requires-body=true, timeout=10, tag=charge.store.token, enable={enableLogin}
 ; 改道：极氪H5家充桩设备接口 -> 银河接口（原生签名+token，每次请求都是实时数据，无需脚本网络）
 http-request ^https:\/\/sea-home-prod\.haohanpower\.tech\/app\/equipment\/.*$ script-path=https://raw.githubusercontent.com/Rbubblee/About-Loon/main/Script/charge_redirect_zeekr.js, requires-body=true, timeout=10, tag=charge.redirect, enable={enableRedirect}, argument=[{notify}]
 ; 极氪家充桩接口响应注入（原生 + WebView 均处理；含 checkBindMyEquipment/getEquipmentExt 合成响应；实验模式只注入桩基本参数）
@@ -49,3 +47,8 @@ generic script-path=https://raw.githubusercontent.com/Rbubblee/About-Loon/main/S
 
 [MitM]
 hostname = sea-home-prod.haohanpower.tech, api-recharge.geely.com, h5-recharge.geely.com, c-h5-prod.haohanpower.tech
+
+[URL Rewrite]
+; 同源代理：页面请求本地路径，Loon 改写为真实网关（保留 headers/body）
+^https://h5-recharge\.geely\.com/galaxy-gw/(.*)$ https://galaxy-user-api.geely.com/$1 header
+^https://h5-recharge\.geely\.com/recharge-gw/(.*)$ https://api-recharge.geely.com/$1 header
