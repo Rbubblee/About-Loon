@@ -1,10 +1,13 @@
 // ============================================================
-// charge_refresh_galaxy.js  v1.1（cron 定时刷新，准实时）
+// charge_refresh_galaxy.js  v1.2（cron 定时刷新，准实时）
 // 每 30 秒用银河【原生密钥】签名拉取业务接口，把实时数据写入 gx_<key>，
 // 供 charge_inject_zeekr.js 直接注入（页面加载读新鲜缓存，秒开）。
 //
-// v1.1：移除 node=DIRECT 参数（默认路由跟随系统，避免策略名不可用导致
-//       空错误）；错误日志改为原样输出 err 内容，便于判断网络是否真的发出。
+// v1.2：去掉签名头里的 Host（App 抓包为 HTTP/2，本就不带 Host 头，
+//       避免 Loon 客户端对显式 Host 的额外处理）；开头加一次百度连通性自检，
+//       用于区分"Loon 网络不可用"与"仅 api-recharge 被拦"。
+// 配合插件 v5.2：捕获脚本规则已收窄到 token 接口，业务接口的 cron 请求
+// 不再命中 http-response 规则（Loon 防循环机制是根因）。
 // token 由 charge_capture_galaxy.js 在银河App打开时抓取
 // （约 30 分钟有效，过期后本脚本自动停刷并保留旧缓存）。
 //
@@ -192,7 +195,6 @@ function signRecharge(method, path, bodyStr, token) {
   lines.push(path);
   var sig = b64encode(hmacSha256(RECHARGE_SECRET, lines.join("\n")));
   var headers = {
-    "Host": "api-recharge.geely.com",
     "User-Agent": UA,
     "Accept": accept,
     "Content-Type": ct,
@@ -236,6 +238,22 @@ try {
   var lastFull = parseInt($persistentStore.read("galaxyLastFullRefreshAt") || "0", 10);
   var doFull = (now - lastFull) > FULL_REFRESH_INTERVAL_MS;
 
+  // 连通性自检：确认 cron 上下文能正常发网络请求（目标为不受 MITM 的域名）
+  $httpClient.get({
+    url: "https://www.baidu.com/",
+    timeout: 8000
+  }, function (err, resp, data) {
+    try {
+      if (!err && resp && resp.statusCode === 200) {
+        console.log("[charge] 连通性自检 OK（baidu status=200）");
+      } else {
+        console.log("[charge] 连通性自检失败 err=[" + String(err) + "] status=" + (resp ? resp.statusCode : "无") + " —— Loon 脚本网络可能整体不可用");
+      }
+    } catch (e) {}
+    runRefresh(eq, provider, doFull);
+  });
+
+  function runRefresh(eq, provider, doFull) {
   var targets = [];
   for (var i = 0; i < ENDPOINTS.length; i++) {
     var ep = ENDPOINTS[i];
@@ -306,6 +324,7 @@ try {
         onFinish();
       });
     })(targets[i]);
+  }
   }
 } catch (e) {
   console.log("[charge] cron 错误: " + (e && e.message ? e.message : String(e)));
