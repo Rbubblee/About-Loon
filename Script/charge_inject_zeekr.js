@@ -261,14 +261,17 @@ try {
   function finish(body, from) {
     var headers = $response.headers || {};
     headers["content-type"] = "application/json";
+    delete headers["content-encoding"];
+    delete headers["Content-Encoding"];
+    delete headers["content-length"];
+    delete headers["Content-Length"];
     console.log("[charge] 注入 " + rule.target + " <- " + from);
     if (NOTIFY) $notification.post("充电桩修改：已注入", rule.key + "（" + from + "）", "");
+    // Loon 3.5.0 官方文档：http-response 修改响应用顶层 {status,headers,body}
     $done({
-      response: {
-        status: 200,
-        headers: headers,
-        body: body
-      }
+      status: 200,
+      headers: headers,
+      body: body
     });
   }
 

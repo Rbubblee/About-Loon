@@ -1,5 +1,5 @@
 #!name=充电桩修改
-#!desc=极氪App家充桩页面实时显示银河家充桩数据（v6.2：修复网关403——改道请求不再带Origin头，CORS头由Loon响应阶段补）。建议先打开一次银河App家充桩页以获取token。
+#!desc=极氪App家充桩页面实时显示银河家充桩数据（v6.3：改道不带Origin绕过网关403；http-response改用官方顶层$done格式并清除gzip头，确保CORS与数据到达浏览器）。建议先打开一次银河App家充桩页以获取token。
 #!homepage=https://github.com/Rbubblee/About-Loon/blob/main/Plugin/充电桩修改.lpx
 #!system=iOS,iPadOS
 #!system_version=15

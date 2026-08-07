@@ -36,12 +36,16 @@ function pass() {
     hdrs2["access-control-allow-credentials"] = "true";
     hdrs2["access-control-expose-headers"] = "*";
     hdrs2["vary"] = "Origin";
+    // 响应体已被 Loon 解压为字符串，必须去掉压缩/长度头，否则浏览器再解一次gzip会失败
+    delete hdrs2["content-encoding"];
+    delete hdrs2["Content-Encoding"];
+    delete hdrs2["content-length"];
+    delete hdrs2["Content-Length"];
+    // Loon 3.5.0 官方文档：http-response 修改响应用顶层 {status,headers,body}
     $done({
-      response: {
-        status: $response.status || 200,
-        headers: hdrs2,
-        body: $response.body || ""
-      }
+      status: $response.status || 200,
+      headers: hdrs2,
+      body: $response.body || ""
     });
   } catch (e2) {
     $done({});
