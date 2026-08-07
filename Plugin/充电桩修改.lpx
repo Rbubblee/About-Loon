@@ -1,5 +1,5 @@
 #!name=充电桩修改
-#!desc=极氪App家充桩页面显示银河家充桩数据（v7.4：新增银河账号网页登录页 galaxy-login，可替代银河App获取token——浏览器完成滑块+短信登录，token自动写入Loon；v7.3 实验模式；v7.2 实时模式）。建议先打开一次银河App或使用网页登录获取token。
+#!desc=极氪App家充桩页面显示银河家充桩数据（v7.5：同源代理——登录页/调试页/中继页全部走 h5-recharge.geely.com 的 galaxy-gw/recharge-gw 本地路径，由Loon改写为真实网关，绕开浏览器CORS 403；v7.4 网页登录页）。建议先打开一次银河App或使用网页登录获取token。
 #!homepage=https://github.com/Rbubblee/About-Loon/blob/main/Plugin/充电桩修改.lpx
 #!system=iOS,iPadOS
 #!system_version=15
@@ -19,8 +19,13 @@ enableDebug=switch,true,tag=银河接口调试页（浏览器打开 h5-recharge.
 enableLive=switch,true,tag=实时模式：极氪H5页面内实时拉取银河数据（需token有效）
 enableMinimal=switch,false,tag=实验模式：只注入桩基本参数（设备列表+绑定判断），其余走极氪真实后端（验证时请关闭实时模式）
 enableLogin=switch,true,tag=银河账号网页登录页（浏览器打开 h5-recharge.geely.com/galaxy-login）
+enableGwRelay=switch,true,tag=同源代理（登录页/调试页/中继页必需，勿关）
 
 [Script]
+; 同源代理：galaxy-gw -> galaxy-user-api，recharge-gw -> api-recharge（页面无Origin直接命中，绕开网关CORS 403）
+http-request ^https:\/\/h5-recharge\.geely\.com\/(galaxy-gw|recharge-gw)\/.*$ script-path=https://raw.githubusercontent.com/Rbubblee/About-Loon/main/Script/charge_gw_relay.js, requires-body=true, timeout=10, tag=charge.gw.relay, enable={enableGwRelay}
+; 网页登录成功后把 token 写入 Loon persistentStore
+http-request ^https:\/\/h5-recharge\.geely\.com\/store-token.*$ script-path=https://raw.githubusercontent.com/Rbubblee/About-Loon/main/Script/charge_store_token.js, requires-body=true, timeout=10, tag=charge.store.token, enable={enableLogin}
 ; 改道：极氪H5家充桩设备接口 -> 银河接口（原生签名+token，每次请求都是实时数据，无需脚本网络）
 http-request ^https:\/\/sea-home-prod\.haohanpower\.tech\/app\/equipment\/.*$ script-path=https://raw.githubusercontent.com/Rbubblee/About-Loon/main/Script/charge_redirect_zeekr.js, requires-body=true, timeout=10, tag=charge.redirect, enable={enableRedirect}, argument=[{notify}]
 ; 极氪家充桩接口响应注入（原生 + WebView 均处理；含 checkBindMyEquipment/getEquipmentExt 合成响应；实验模式只注入桩基本参数）

@@ -1,8 +1,9 @@
 // ============================================================
 // charge_galaxy_login.js  v1.0（银河账号网页登录页，替代银河App）
 //
-// 挂在 https://h5-recharge.geely.com/galaxy-login 下（该 Origin 被
-// galaxy-user-api 与 api-recharge 两个网关的 CORS 白名单放行，已实测）。
+// 挂在 https://h5-recharge.geely.com/galaxy-login 下；两个网关的请求都走
+// charge_gw_relay.js 同源代理（/galaxy-gw、/recharge-gw），绕开网关对
+// 带 Origin 浏览器请求的 403 拒绝。
 //
 // 完整链路（移植自 evse-hub-ha 的 SMS 登录）：
 //   security config → Geetest v4 滑块 → sendSms → mobileCodeLogin
@@ -57,10 +58,10 @@ pre{white-space:pre-wrap;word-break:break-all;font-size:11px;background:#0b1019;
 // ---- 签名参数 ----
 var GALAXY_KEY = "204925390";
 var GALAXY_SECRET = "bVy52qsT6U5ElPOZN4vTkhnMdzedMjx6";
-var GALAXY_HOST = "https://galaxy-user-api.geely.com";
+var GALAXY_HOST = "https://h5-recharge.geely.com/galaxy-gw";
 var RECHARGE_KEY = "204195485";
 var RECHARGE_SECRET = "CqPwP83wzdjesmLeDuzK6SljsYN5PvRM";
-var API_HOST = "https://api-recharge.geely.com";
+var API_HOST = "https://h5-recharge.geely.com/recharge-gw";
 var UA = "GeelyGalaxy/1.53.0 (com.geelygalaxy.customer; build:15300087; iOS 26.5.0) Alamofire/5.11.1";
 var OAUTH_CLIENT_ID = "30000023";
 
@@ -434,6 +435,14 @@ $("btnLogin").onclick = async function () {
     authExpiresAt: authExp,
     refreshExpiresAt: refreshExp
   });
+  // 把 token 写入 Loon（与打开银河App等效）
+  try {
+    await fetch("https://h5-recharge.geely.com/store-token", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ authToken: d.authToken, refreshToken: d.refreshToken || "", userId: glUserId, expiresAt: Math.floor(authExp / 1000) })
+    });
+  } catch (e) {}
   $("sessionInfo").textContent = "登录成功：user_id=" + glUserId;
   showMsg("登录成功！token 已写入 Loon（约30分钟有效），现在可以关闭本页", "ok");
   var pre = document.createElement("pre");

@@ -3,8 +3,8 @@
 //
 // 原理：
 //   极氪H5（c-h5-prod 来源）直接 fetch api-recharge 会被银河网关 403
-//   （Origin 不在白名单）。本页挂在 h5-recharge.geely.com 下，浏览器来源
-//   自带白名单 Origin，可以实时调银河接口。
+//   （带 Origin 的浏览器请求一律拒绝）。本页挂在 h5-recharge.geely.com 下，
+//   通过 charge_gw_relay.js 同源代理（/recharge-gw）访问 api-recharge。
 //   极氪H5 页面由 charge_live_inject.js 注入客户端脚本（charge_live_client.js），
 //   客户端建一个隐藏 iframe 指向本页，通过 postMessage 把设备类请求转发过来，
 //   本页用内嵌 token 现场签名请求 api-recharge，再把结果 post 回去。
@@ -50,7 +50,7 @@ var INJECTED_USER_ID = "__USER_ID__";
 // ---- 签名参数（与 charge_inject_zeekr.js / evse-hub-ha 一致） ----
 var RECHARGE_KEY = "204195485";
 var RECHARGE_SECRET = "CqPwP83wzdjesmLeDuzK6SljsYN5PvRM";
-var API_HOST = "https://api-recharge.geely.com";
+var API_HOST = "https://h5-recharge.geely.com/recharge-gw";
 var UA = "GeelyGalaxy/1.54.0 (com.geelygalaxy.customer; build:15400077; iOS 26.6.0) Alamofire/5.11.1";
 
 // ---------------- 纯 JS：MD5 / SHA-256 / HMAC-SHA256 / Base64 ----------------

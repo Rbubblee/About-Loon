@@ -7,10 +7,10 @@
 // 用于确认「改道/签名/token」这条链路能返回合理的银河数据。
 //
 // 为什么挂在 h5-recharge.geely.com 下：
-//   银河网关（Kaede）只对 Origin=https://h5-recharge.geely.com 放行 CORS
-//   （实测：该 Origin 返回 200；c-h5-prod.haohanpower.tech 返回 403 Invalid
-//   CORS request）。页面来源是这个域名时，浏览器 fetch 自带该 Origin，
-//   网关直接放行，不需要任何 CORS 注入。
+//   银河网关对携带 Origin 的浏览器请求一律 403。页面通过 charge_gw_relay.js
+//   的同源代理访问：API_HOST 实际是 h5-recharge.geely.com/recharge-gw，
+//   Loon 在 http-request 阶段改写为 api-recharge.geely.com（无 Origin），
+//   响应按同源返回，浏览器不需要任何 CORS 头。
 //
 // token：从 persistentStore 读取 galaxyRechargeToken/galaxyUserId 注入页面；
 // 过期或想换号时，页面里可以手动粘贴 token（存 localStorage）。
@@ -66,7 +66,7 @@ var INJECTED_USER_ID = "__USER_ID__";
 // ---- 签名参数（与 charge_inject_zeekr.js / evse-hub-ha 一致） ----
 var RECHARGE_KEY = "204195485";
 var RECHARGE_SECRET = "CqPwP83wzdjesmLeDuzK6SljsYN5PvRM";
-var API_HOST = "https://api-recharge.geely.com";
+var API_HOST = "https://h5-recharge.geely.com/recharge-gw";
 var UA = "GeelyGalaxy/1.54.0 (com.geelygalaxy.customer; build:15400077; iOS 26.6.0) Alamofire/5.11.1";
 
 // ---------------- 纯 JS：MD5 / SHA-256 / HMAC-SHA256 / Base64 ----------------
