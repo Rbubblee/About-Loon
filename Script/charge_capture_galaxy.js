@@ -53,6 +53,7 @@ try {
     if (d.userId) $persistentStore.write(String(d.userId), "galaxyUserId");
   } else if (key) {
     $persistentStore.write(body, "gx_" + key);
+    $persistentStore.write(String(Date.now()), "galaxyLastUpdatedAt");
     if (key === "getMyEquipments") {
       var list = d.resultList || [];
       if (list.length > 0) {

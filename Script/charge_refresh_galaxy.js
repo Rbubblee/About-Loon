@@ -1,31 +1,23 @@
 // ============================================================
-// charge_inject_zeekr.js  v5（实时注入 + 新鲜缓存快速路径）
-// 极氪家充桩H5 发出设备类请求时，现场用银河【原生密钥】签名调用
-// api-recharge.geely.com，把【实时】响应注入极氪H5响应。
-// v5 变更：
-//   1. 修复 $httpClient timeout 单位错误（Loon 官方单位是毫秒，12 -> 10000）
-//   2. 请求强制 node=DIRECT 直连（银河接口为国内域名）
-//   3. 修复 $done 返回格式：http-response 必须用
-//      $done({response:{status,headers,body}})，v4 的顶层 statusCode 会被
-//      Loon 忽略导致注入不生效（页面显示旧数据）
-//   4. 新增新鲜缓存快速路径：cron（charge_refresh_galaxy.js）每 30 秒刷新
-//      gx_<key>，若缓存新鲜则直接注入、不再发网络请求，页面秒开；
-//      缓存不新鲜时才现场实时拉取，失败再回退旧缓存/种子数据。
+// charge_refresh_galaxy.js  v1（cron 定时刷新，准实时）
+// 每 30 秒用银河【原生密钥】签名拉取业务接口，把实时数据写入 gx_<key>，
+// 供 charge_inject_zeekr.js 直接注入（页面加载读新鲜缓存，秒开）。
+//
+// 与 v4 的区别：实时拉取从"响应脚本内 $httpClient"挪到 cron 定时任务，
+// 避免 Loon http-response 内发网络请求的稳定性问题；数据最旧 30 秒，
+// 接近实时。token 由 charge_capture_galaxy.js 在银河App打开时抓取
+// （约 30 分钟有效，过期后本脚本自动停刷并保留旧缓存）。
 //
 // 密钥来源：开源项目 evse-hub-ha（吉利银河/浩瀚能源 HA 集成），
-//          已用抓包真实请求验证：复算签名与抓包 x-ca-signature 逐字节一致。
-// 依赖：charge_capture_galaxy.js 保存 galaxyRechargeToken / galaxyUserId /
-//       galaxyTokenExpiresAt / galaxyLastEquipmentId / galaxyLastProviderNo。
-// 降级：token 缺失/过期或实时调用失败时，回退到缓存快照（gx_<key>）或种子数据。
+//           已用抓包真实请求验证：复算签名与抓包 x-ca-signature 逐字节一致。
 // ============================================================
-
-var NOTIFY = String(($argument || [])[0]) !== "false";
 
 var RECHARGE_KEY = "204195485";
 var RECHARGE_SECRET = "CqPwP83wzdjesmLeDuzK6SljsYN5PvRM";
 var API_HOST = "https://api-recharge.geely.com";
 var UA = "GeelyGalaxy/1.54.0 (com.geelygalaxy.customer; build:15400077; iOS 26.6.0) Alamofire/5.11.1";
-var REFRESH_FRESH_MS = 35000; // cron 每 30s 刷新一次，35s 内的缓存视为新鲜
+
+var FULL_REFRESH_INTERVAL_MS = 180000; // 详情类接口每 3 分钟全量刷一次
 
 // ---------------- 纯 JS：MD5 / SHA-256 / HMAC-SHA256 / Base64 ----------------
 function md5hex(input) {
@@ -213,144 +205,108 @@ function signRecharge(method, path, bodyStr, token) {
   return headers;
 }
 
-// ---------------- 接口映射与请求体构建 ----------------
-var MAP = {
-  "/app/equipment/v2/manage/getMyEquipments": { key: "getMyEquipments", target: "/gep/v2/home/charge/getMyEquipments", body: function (u, eq, p) { return { sourceTypeKey: "0010000", userId: u }; } },
-  "/app/equipment/v2/manage/getMyEquipmentDetail": { key: "getMyEquipmentDetail", target: "/gep/v1/home/charge/getMyEquipmentDetail", body: function (u, eq, p) { return { sourceTypeKey: "0010000", userId: u, equipmentId: eq, providerNo: p }; } },
-  "/app/equipment/v2/manage/getMyEquipmentCards": { key: "getMyEquipmentCards", target: "/gep/v2/home/charge/getMyEquipmentCards", body: function (u, eq, p) { return { sourceTypeKey: "0010000", userId: u, equipmentId: eq, providerNo: p }; } },
-  "/app/equipment/v2/manage/getMyEquipmentShares": { key: "getMyEquipmentShares", target: "/gep/v1/home/charge/getMyEquipmentShares", body: function (u, eq, p) { return { sourceTypeKey: "0010000", userId: u, equipmentId: eq, providerNo: p }; } },
-  "/app/equipment/v2/manage/getEquipmentVersions": { key: "getEquipmentVersions", target: "/gep/v1/home/charge/getEquipmentVersions", body: function (u, eq, p) { return { sourceTypeKey: "0010000", userId: u, equipmentId: eq, providerNo: p }; } },
-  "/app/equipment/v2/manage/getEquipmentBindVins": { key: "getEquipmentBindVins", target: "/gep/v2/home/charge/getEquipmentBindVins", body: function (u, eq, p) { return { sourceTypeKey: "0010000", userId: u, equipmentId: eq, providerNo: p }; } },
-  "/app/equipment/v2/manage/getEquipmentChargeOrders": { key: "getEquipmentChargeOrders", target: "/gep/v2/home/charge/getEquipmentChargeOrders", body: function (u, eq, p) { return { sourceTypeKey: "0010000", userId: u, equipmentId: eq, providerNo: p, calcType: 1, pageNum: 1, pageSize: 10 }; } },
-  "/app/equipment/v2/manage/getEquipmentChargeOrderCalc": { key: "getEquipmentChargeOrderCalc", target: "/gep/v2/home/charge/getEquipmentChargeOrderCalc", body: function (u, eq, p) { return { sourceTypeKey: "0010000", userId: u, equipmentId: eq, providerNo: p, calcType: 1 }; } },
-  "/app/sim/v1/netflow/generateRenewUrl": { key: "generateRenewUrl", target: "/sim/v1/netflow/generateRenewUrl", body: function (u, eq, p) { return { sourceTypeKey: "0010000", userId: u, deviceSn: eq, providerNo: p }; } }
-};
-
-// 种子：设备列表（2026-08-07 真实抓包）
-var SEED = {
-  "getMyEquipments": '{"code":"0","message":"SUCCESS","data":{"pager":null,"resultList":[{"equipmentId":"70260227463","providerNo":"DIRECT_WDZ","equipmentName":"我的家桩","isOwner":1,"bindTime":"2026-08-02 17:46:44","isAuth":1,"showAuth":1,"warrantyStartTime":null,"warrantyEndTime":null}]}}'
-};
+// ---------------- 接口清单（与注入脚本 MAP 保持一致） ----------------
+var ENDPOINTS = [
+  { key: "getMyEquipments", path: "/gep/v2/home/charge/getMyEquipments", body: function (u, eq, p) { return { sourceTypeKey: "0010000", userId: u }; }, always: true },
+  { key: "getMyEquipmentDetail", path: "/gep/v1/home/charge/getMyEquipmentDetail", body: function (u, eq, p) { return { sourceTypeKey: "0010000", userId: u, equipmentId: eq, providerNo: p }; }, always: false },
+  { key: "getMyEquipmentCards", path: "/gep/v2/home/charge/getMyEquipmentCards", body: function (u, eq, p) { return { sourceTypeKey: "0010000", userId: u, equipmentId: eq, providerNo: p }; }, always: false },
+  { key: "getMyEquipmentShares", path: "/gep/v1/home/charge/getMyEquipmentShares", body: function (u, eq, p) { return { sourceTypeKey: "0010000", userId: u, equipmentId: eq, providerNo: p }; }, always: false },
+  { key: "getEquipmentVersions", path: "/gep/v1/home/charge/getEquipmentVersions", body: function (u, eq, p) { return { sourceTypeKey: "0010000", userId: u, equipmentId: eq, providerNo: p }; }, always: false },
+  { key: "getEquipmentBindVins", path: "/gep/v2/home/charge/getEquipmentBindVins", body: function (u, eq, p) { return { sourceTypeKey: "0010000", userId: u, equipmentId: eq, providerNo: p }; }, always: false },
+  { key: "getEquipmentChargeOrders", path: "/gep/v2/home/charge/getEquipmentChargeOrders", body: function (u, eq, p) { return { sourceTypeKey: "0010000", userId: u, equipmentId: eq, providerNo: p, calcType: 1, pageNum: 1, pageSize: 10 }; }, always: false },
+  { key: "getEquipmentChargeOrderCalc", path: "/gep/v2/home/charge/getEquipmentChargeOrderCalc", body: function (u, eq, p) { return { sourceTypeKey: "0010000", userId: u, equipmentId: eq, providerNo: p, calcType: 1 }; }, always: false },
+  { key: "generateRenewUrl", path: "/sim/v1/netflow/generateRenewUrl", body: function (u, eq, p) { return { sourceTypeKey: "0010000", userId: u, deviceSn: eq, providerNo: p }; }, always: false }
+];
 
 // ---------------- 主流程 ----------------
 try {
-  var reqHeaders = $request.headers || {};
-  var ua = String(reqHeaders["user-agent"] || reqHeaders["User-Agent"] || "");
-  var reqOrigin = String(reqHeaders["request-original"] || "");
-  var isH5 = (ua.indexOf("Mozilla") >= 0) || (reqOrigin.indexOf("zeekr") >= 0);
-  if (!isH5) {
-    console.log("[charge] 原生请求，放行");
-    $done({});
-    return;
-  }
-
-  var method = String($request.method || "POST").toUpperCase();
-  if (method !== "POST") {
-    console.log("[charge] 非POST（CORS预检等），放行: " + method);
-    $done({});
-    return;
-  }
-
-  var url = $request.url || "";
-  var path = url.replace(/^https?:\/\/[^/]+/, "").split("?")[0];
-  var rule = MAP[path];
-  if (!rule) {
-    console.log("[charge] 未映射极氪接口: " + path);
-    if (NOTIFY) $notification.post("充电桩修改：未映射接口", path + "（把这条发给我，我来加映射）", "");
-    $done({});
-    return;
-  }
-
   var token = $persistentStore.read("galaxyRechargeToken") || "";
   var userId = $persistentStore.read("galaxyUserId") || "";
   var expiresAt = parseInt($persistentStore.read("galaxyTokenExpiresAt") || "0", 10);
-  var eq = $persistentStore.read("galaxyLastEquipmentId") || "";
-  var provider = $persistentStore.read("galaxyLastProviderNo") || "DIRECT_WDZ";
-  var now = Math.floor(Date.now() / 1000);
-  var tokenOk = !!token && !!userId && (!expiresAt || now < expiresAt - 60);
-
-  function finish(body, from) {
-    var headers = $response.headers || {};
-    headers["content-type"] = "application/json";
-    console.log("[charge] 注入 " + rule.target + " <- " + from);
-    if (NOTIFY) $notification.post("充电桩修改：已注入", rule.key + "（" + from + "）", "");
-    $done({
-      response: {
-        status: 200,
-        headers: headers,
-        body: body
-      }
-    });
-  }
-
-  function fallback() {
-    var cached = $persistentStore.read("gx_" + rule.key);
-    if (cached) { finish(cached, "缓存"); return; }
-    var seed = SEED[rule.key];
-    if (seed) { finish(seed, "种子"); return; }
-    console.log("[charge] 无数据可注入: " + path);
-    if (NOTIFY) $notification.post("充电桩修改：无数据", path + "（请先打开一次银河App）", "");
+  var nowSec = Math.floor(Date.now() / 1000);
+  if (!token || !userId || (expiresAt && nowSec > expiresAt - 60)) {
+    console.log("[charge] cron 跳过：token 缺失或已过期");
     $done({});
-  }
-
-  // 新鲜缓存快速路径：cron 刚刷新的数据直接用，页面加载不阻塞不发请求
-  function tryFreshCache() {
-    var cached = $persistentStore.read("gx_" + rule.key);
-    if (!cached) return false;
-    var updatedAt = parseInt($persistentStore.read("galaxyLastUpdatedAt") || "0", 10);
-    var ageMs = Date.now() - updatedAt;
-    if (updatedAt > 0 && ageMs <= REFRESH_FRESH_MS) {
-      finish(cached, "缓存 " + Math.max(0, Math.round(ageMs / 1000)) + "s");
-      return true;
-    }
-    return false;
-  }
-
-  if (!tokenOk) {
-    console.log("[charge] token 缺失或过期 token=" + (token ? "有" : "无") + " userId=" + (userId ? "有" : "无"));
-    if (NOTIFY) $notification.post("充电桩修改：银河token已过期", "请打开一次银河App家充桩页刷新token，再回极氪查看", "");
-    fallback();
     return;
   }
 
-  if (tryFreshCache()) return;
+  var eq = $persistentStore.read("galaxyLastEquipmentId") || "";
+  var provider = $persistentStore.read("galaxyLastProviderNo") || "DIRECT_WDZ";
+  var now = Date.now();
+  var lastFull = parseInt($persistentStore.read("galaxyLastFullRefreshAt") || "0", 10);
+  var doFull = (now - lastFull) > FULL_REFRESH_INTERVAL_MS;
 
-  var bodyStr = JSON.stringify(rule.body(userId, eq, provider));
-  var headers = signRecharge("POST", rule.target, bodyStr, token);
-
-  $httpClient.post({
-    url: API_HOST + rule.target,
-    headers: headers,
-    body: bodyStr,
-    timeout: 10000,
-    node: "DIRECT"
-  }, function (err, resp, data) {
-    try {
-      if (!err && resp && resp.statusCode === 200 && data) {
-        var j = JSON.parse(data);
-        if (j.code === "0" || j.code === 0) {
-          if (rule.key === "getMyEquipments") {
-            var list = (j.data && j.data.resultList) || [];
-            if (list.length > 0) {
-              $persistentStore.write(String(list[0].equipmentId || ""), "galaxyLastEquipmentId");
-              $persistentStore.write(String(list[0].providerNo || provider), "galaxyLastProviderNo");
-            }
-          }
-          finish(data, "实时");
-          return;
-        }
-        console.log("[charge] 银河接口异常 " + rule.target + ": " + String(data).slice(0, 200));
-        fallback();
-        return;
-      }
-      console.log("[charge] 实时调用失败 " + rule.target + " err=" + String(err || ""));
-      fallback();
-    } catch (e) {
-      console.log("[charge] 回调异常: " + (e && e.message ? e.message : String(e)));
-      fallback();
+  var targets = [];
+  for (var i = 0; i < ENDPOINTS.length; i++) {
+    var ep = ENDPOINTS[i];
+    if (ep.always || doFull) {
+      if (!eq && !ep.always) continue; // 详情类接口需要 equipmentId
+      targets.push(ep);
     }
-  });
+  }
+  if (targets.length === 0) { $done({}); return; }
+
+  var doneCount = 0;
+  var failCount = 0;
+  var successAny = false;
+
+  function onFinish() {
+    doneCount++;
+    if (doneCount < targets.length) return;
+    if (successAny) {
+      $persistentStore.write(String(Date.now()), "galaxyLastUpdatedAt");
+      if (doFull) $persistentStore.write(String(Date.now()), "galaxyLastFullRefreshAt");
+      console.log("[charge] cron 刷新完成 " + doneCount + " 个接口（失败 " + failCount + "）");
+    } else {
+      console.log("[charge] cron 本轮全部失败（" + failCount + "/" + targets.length + "），保留旧缓存");
+    }
+    $done({});
+  }
+
+  for (i = 0; i < targets.length; i++) {
+    (function (ep) {
+      var bodyStr = JSON.stringify(ep.body(userId, eq, provider));
+      var headers = signRecharge("POST", ep.path, bodyStr, token);
+      $httpClient.post({
+        url: API_HOST + ep.path,
+        headers: headers,
+        body: bodyStr,
+        timeout: 10000,
+        node: "DIRECT"
+      }, function (err, resp, data) {
+        try {
+          if (!err && resp && resp.statusCode === 200 && data) {
+            var j = JSON.parse(data);
+            if (j.code === "0" || j.code === 0 || j.code === "success") {
+              $persistentStore.write(data, "gx_" + ep.key);
+              successAny = true;
+              if (ep.key === "getMyEquipments") {
+                var list = (j.data && j.data.resultList) || [];
+                if (list.length > 0) {
+                  $persistentStore.write(String(list[0].equipmentId || ""), "galaxyLastEquipmentId");
+                  $persistentStore.write(String(list[0].providerNo || provider), "galaxyLastProviderNo");
+                  eq = String(list[0].equipmentId || eq);
+                  provider = String(list[0].providerNo || provider);
+                }
+              }
+              console.log("[charge] cron 刷新 " + ep.key);
+            } else {
+              failCount++;
+              console.log("[charge] cron " + ep.key + " 异常: " + String(data).slice(0, 150));
+            }
+          } else {
+            failCount++;
+            console.log("[charge] cron " + ep.key + " 请求失败 err=" + String(err || "") + " status=" + (resp ? resp.statusCode : ""));
+          }
+        } catch (e) {
+          failCount++;
+          console.log("[charge] cron " + ep.key + " 回调异常: " + (e && e.message ? e.message : String(e)));
+        }
+        onFinish();
+      });
+    })(targets[i]);
+  }
 } catch (e) {
-  console.log("[charge] 错误: " + (e && e.message ? e.message : String(e)));
-  $notification.post("充电桩修改 脚本错误", e && e.message ? e.message : String(e), "");
+  console.log("[charge] cron 错误: " + (e && e.message ? e.message : String(e)));
   $done({});
 }
