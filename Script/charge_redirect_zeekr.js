@@ -1,5 +1,11 @@
 // ============================================================
-// charge_redirect_zeekr.js  v1（请求改道，真·实时，零脚本网络依赖）
+// charge_redirect_zeekr.js  v1.1（请求改道，实验性，默认关闭）
+//
+// 注意（v7.0 起）：改道与响应注入冲突——实测 Loon 对 http-request 改写后的
+// 请求不再执行 http-response 脚本（注入失效），且改写请求仍会带上原始 Origin，
+// 银河网关返回 403 Invalid CORS request / RBAC: access denied。
+// 因此插件默认关闭本脚本，改由 charge_inject_zeekr.js 纯响应注入。
+// 保留本文件仅供排查/实验；如需开启请确保 Origin 能被真正去掉。
 //
 // 思路（你提的"替换请求"）：
 //   极氪家充桩 H5 的设备类请求在 http-request 阶段被直接改写——
@@ -295,6 +301,9 @@ try {
   // 注意：不能带 Origin 头！银河网关自带 CORS 校验，带极氪的 Origin 会返回
   // 403 "Invalid CORS request"。去掉 Origin 后网关把它当原生 App 请求处理。
   // CORS 响应头由 charge_capture_galaxy.js 在响应阶段无条件补上。
+  // 实测 Loon 会保留原始请求头里未显式覆盖的 Origin，这里显式置空（尽力而为）。
+  headers["Origin"] = "";
+  headers["origin"] = "";
   console.log("[charge] 改道 " + path + " -> " + rule.path);
   if (NOTIFY) {
     var notified = $persistentStore.read("galaxyRedirectNotified") || "";

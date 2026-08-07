@@ -1,21 +1,23 @@
 // ============================================================
-// charge_inject_zeekr.js  v5.1（纯缓存注入，零网络）
-// 极氪家充桩H5 发出设备类请求时，直接读取 charge_refresh_galaxy.js
-// （cron 每 30 秒）刷新到 persistentStore 的 gx_<key> 缓存并注入响应。
+// charge_inject_zeekr.js  v7.0（纯响应注入，零网络）
+// 极氪家充桩的设备类接口（sea-home-prod /app/equipment/*）无论原生还是
+// WebView 发出，统一把响应替换为银河数据（缓存 gx_<key> / 内置种子 / 合成）。
 //
-// v5.1 变更：
-//   1. 移除 http-response 内的 $httpClient 实时拉取——Loon 的 http-response
-//      上下文里发网络请求不可靠（实测 err 为空即被静默掐断），
-//      响应路径改为"零网络"：只读缓存/种子，页面秒开且稳定。
-//   2. 实时性完全交给 cron（charge_refresh_galaxy.js 每 30s 刷新），
-//      数据最旧 30 秒，仍接近实时。
-//   3. 日志给出缓存时间/缺失提示，方便判断 cron 是否在跑。
+// v7.0 变更（修复"点击充电桩进入绑定页"）：
+//   1. 去掉 isH5 过滤：原生 ZeekrLife（Alamofire）请求同样注入——原生家充桩
+//      首页（hh_energy://page/wallbox/homeCharge）的设备列表就是原生 getMyEquipments，
+//      之前放行导致原生页永远拿到空列表。
+//   2. 新增 checkBindMyEquipment 合成响应：极氪/浩瀚服务端不知道银河桩，点击桩时
+//      返回 isNeedBlueSk=1（需要绑桩）→ 跳 /link-equipment/*。这里固定返回
+//      isNeedBlueSk=0，让前端认为"无需绑桩"，从而进入设备页而不是绑定页。
+//   3. 新增 getEquipmentExt 合成响应：设备信息页（/equipment-info/center）依赖它，
+//      之前未映射会弹"未映射接口"且页面空白。
+//   4. 关闭 http-request 改道后，响应脚本正常执行（Loon 对改道后的响应不再跑
+//      http-response，v6 实测注入失效 + 银河网关 403），本脚本恢复为主通道。
 //
-// 密钥来源：开源项目 evse-hub-ha（吉利银河/浩瀚能源 HA 集成），
-//          已用抓包真实请求验证：复算签名与抓包 x-ca-signature 逐字节一致。
-// 依赖：charge_capture_galaxy.js 保存 token/userId（银河App打开时）；
+// 依赖：charge_capture_galaxy.js 保存 token/userId/业务数据（打开银河App时刷新）；
 //       charge_refresh_galaxy.js 每 30s 用原生签名刷新 gx_<key>。
-// 降级：无缓存时回退内置种子数据（设备列表）；无映射接口弹通知。
+// 降级：无缓存时回退内置种子数据；无映射接口弹通知（把路径发回补映射）。
 // ============================================================
 
 var NOTIFY = String(($argument || [])[0]) !== "false";
@@ -212,6 +214,33 @@ function signRecharge(method, path, bodyStr, token) {
 }
 
 // ---------------- 接口映射与请求体构建 ----------------
+function buildEquipmentExt() {
+  // 设备信息页依赖 /app/equipment/v2/manage/getEquipmentExt；
+  // 有 gx_getMyEquipmentDetail 缓存时尽量带出真实字段，否则用默认值。
+  var d = null;
+  try { d = (JSON.parse($persistentStore.read("gx_getMyEquipmentDetail") || "null") || {}).data || null; } catch (e) {}
+  var eqId = (d && d.equipmentId) || $persistentStore.read("galaxyLastEquipmentId") || "";
+  return JSON.stringify({
+    code: "0",
+    message: "SUCCESS",
+    data: {
+      equipmentId: eqId,
+      equipmentName: (d && d.equipmentName) || "我的家桩",
+      hardwareVersion: "",
+      softwareVersion: "",
+      activeDate: "",
+      warrantyRestDays: null,
+      iccId: "",
+      sim: "",
+      simRestDays: null,
+      isNetworkService: 0,
+      isShowSetEquipmentName: 1,
+      isShowNetworkService: 1,
+      manufacturerPhone: (d && d.manufacturerPhone) || "4001876000"
+    }
+  });
+}
+
 var MAP = {
   "/app/equipment/v2/manage/getMyEquipments": { key: "getMyEquipments", target: "/gep/v2/home/charge/getMyEquipments", body: function (u, eq, p) { return { sourceTypeKey: "0010000", userId: u }; } },
   "/app/equipment/v2/manage/getMyEquipmentDetail": { key: "getMyEquipmentDetail", target: "/gep/v1/home/charge/getMyEquipmentDetail", body: function (u, eq, p) { return { sourceTypeKey: "0010000", userId: u, equipmentId: eq, providerNo: p }; } },
@@ -221,26 +250,23 @@ var MAP = {
   "/app/equipment/v2/manage/getEquipmentBindVins": { key: "getEquipmentBindVins", target: "/gep/v2/home/charge/getEquipmentBindVins", body: function (u, eq, p) { return { sourceTypeKey: "0010000", userId: u, equipmentId: eq, providerNo: p }; } },
   "/app/equipment/v2/manage/getEquipmentChargeOrders": { key: "getEquipmentChargeOrders", target: "/gep/v2/home/charge/getEquipmentChargeOrders", body: function (u, eq, p) { return { sourceTypeKey: "0010000", userId: u, equipmentId: eq, providerNo: p, calcType: 1, pageNum: 1, pageSize: 10 }; } },
   "/app/equipment/v2/manage/getEquipmentChargeOrderCalc": { key: "getEquipmentChargeOrderCalc", target: "/gep/v2/home/charge/getEquipmentChargeOrderCalc", body: function (u, eq, p) { return { sourceTypeKey: "0010000", userId: u, equipmentId: eq, providerNo: p, calcType: 1 }; } },
-  "/app/sim/v1/netflow/generateRenewUrl": { key: "generateRenewUrl", target: "/sim/v1/netflow/generateRenewUrl", body: function (u, eq, p) { return { sourceTypeKey: "0010000", userId: u, deviceSn: eq, providerNo: p }; } }
+  "/app/sim/v1/netflow/generateRenewUrl": { key: "generateRenewUrl", target: "/sim/v1/netflow/generateRenewUrl", body: function (u, eq, p) { return { sourceTypeKey: "0010000", userId: u, deviceSn: eq, providerNo: p }; } },
+  // 合成接口：浩瀚服务端不认银河桩，直接返回"已绑定/无需绑桩"，避免进入绑定页
+  "/app/equipment/v2/manage/checkBindMyEquipment": { key: "checkBindMyEquipment", target: "synthetic", synthetic: true, synth: function () { return '{"code":"0","message":"SUCCESS","data":{"isNeedBlueSk":0}}'; } },
+  // 合成接口：设备信息页（/equipment-info/center）
+  "/app/equipment/v2/manage/getEquipmentExt": { key: "getEquipmentExt", target: "synthetic", synthetic: true, synth: buildEquipmentExt }
 };
 
-// 种子：设备列表（2026-08-07 真实抓包）
+// 种子：2026-08-07 真实抓包（银河 App）
 var SEED = {
-  "getMyEquipments": '{"code":"0","message":"SUCCESS","data":{"pager":null,"resultList":[{"equipmentId":"70260227463","providerNo":"DIRECT_WDZ","equipmentName":"我的家桩","isOwner":1,"bindTime":"2026-08-02 17:46:44","isAuth":1,"showAuth":1,"warrantyStartTime":null,"warrantyEndTime":null}]}}'
+  "getMyEquipments": '{"code":"0","message":"SUCCESS","data":{"pager":null,"resultList":[{"equipmentId":"70260227463","providerNo":"DIRECT_WDZ","equipmentName":"我的家桩","isOwner":1,"bindTime":"2026-08-02 17:46:44","isAuth":1,"showAuth":1,"warrantyStartTime":null,"warrantyEndTime":null}]}}',
+  "getMyEquipmentDetail": '{"code":"0","message":"SUCCESS","data":{"equipmentId":"70260227463","equipmentName":"我的家桩","providerNo":"DIRECT_WDZ","isOta":0,"isOwner":1,"isAuth":1,"blueSk":"1SVj1BYPRcvyTh9L","blueName":"70260227463","equipFuncInfoList":[{"code":"0","desc":"设备充电"},{"code":"1","desc":"蓝牙连接"},{"code":"5","desc":"充电记录"},{"code":"6","desc":"家桩自检"},{"code":"7","desc":"家桩分享"},{"code":"4","desc":"设备升级"},{"code":"8","desc":"身份验证"},{"code":"9","desc":"即插即充"},{"code":"2","desc":"卡片管理"},{"code":"17","desc":"联网服务"}],"equipOwnerInfo":{"userId":"8032659707749533522","userName":"探索者No.2CeFZ","avatarUrl":"https://galaxy-oss.geely.com/app/galaxy-default.jpg","bindTime":"2026-08-02 17:46:44","shareTime":null},"equipSharedInfo":null,"equipStatusInfo":{"status":101,"desc":"设备空闲","displayMsgList":["桩侧未检测到插枪"]},"warrantyStartTime":null,"warrantyEndTime":null,"manufacturerPhone":"4001876000","otaRemindInfo":{"remindTypeList":null,"pictureUrl":null}}}',
+  "checkBindMyEquipment": '{"code":"0","message":"SUCCESS","data":{"isNeedBlueSk":0}}',
+  "getEquipmentExt": '{"code":"0","message":"SUCCESS","data":{"equipmentId":"70260227463","equipmentName":"我的家桩","hardwareVersion":"","softwareVersion":"","activeDate":"","warrantyRestDays":null,"iccId":"","sim":"","simRestDays":null,"isNetworkService":0,"isShowSetEquipmentName":1,"isShowNetworkService":1,"manufacturerPhone":"4001876000"}}'
 };
 
 // ---------------- 主流程 ----------------
 try {
-  var reqHeaders = $request.headers || {};
-  var ua = String(reqHeaders["user-agent"] || reqHeaders["User-Agent"] || "");
-  var reqOrigin = String(reqHeaders["request-original"] || "");
-  var isH5 = (ua.indexOf("Mozilla") >= 0) || (reqOrigin.indexOf("zeekr") >= 0);
-  if (!isH5) {
-    console.log("[charge] 原生请求，放行");
-    $done({});
-    return;
-  }
-
   var method = String($request.method || "POST").toUpperCase();
   if (method !== "POST") {
     console.log("[charge] 非POST（CORS预检等），放行: " + method);
@@ -256,6 +282,22 @@ try {
     if (NOTIFY) $notification.post("充电桩修改：未映射接口", path + "（把这条发给我，我来加映射）", "");
     $done({});
     return;
+  }
+
+  // 合成接口：固定响应（如 checkBindMyEquipment=已绑定），原生/WebView 均生效
+  if (rule.synthetic) {
+    var synthBody = rule.synth();
+    if (synthBody) {
+      var headers0 = $response.headers || {};
+      headers0["content-type"] = "application/json";
+      delete headers0["content-encoding"];
+      delete headers0["Content-Encoding"];
+      delete headers0["content-length"];
+      delete headers0["Content-Length"];
+      console.log("[charge] 合成注入 " + path + " -> " + rule.key);
+      $done({ status: 200, headers: headers0, body: synthBody });
+      return;
+    }
   }
 
   function finish(body, from) {
