@@ -58,6 +58,14 @@ try {
     j = JSON.parse(body);
   } catch (e) {}
   if (!j || (j.code !== "0" && j.code !== 0 && j.code !== "success")) {
+    // 改道后若银河网关报错（如 token 失效），让用户看到原因
+    try {
+      var originHd = ($request.headers || {})["origin"] || "";
+      if (originHd && NOTIFY) {
+        var errMsg = String((j && j.message) || (j && j.msg) || "未知错误");
+        $notification.post("充电桩修改：银河接口报错", "code=" + (j && j.code) + " " + errMsg.slice(0, 80), "");
+      }
+    } catch (e2) {}
     pass();
     return;
   }

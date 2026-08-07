@@ -277,7 +277,7 @@ try {
   var nowSec = Math.floor(Date.now() / 1000);
   var tokenOk = !!token && !!userId && (!expiresAt || nowSec < expiresAt - 60);
   if (!tokenOk) {
-    console.log("[charge] token/userId 缺失或过期，放行原请求");
+    console.log("[charge] token/userId 缺失或过期（expiresAt=" + expiresAt + " now=" + nowSec + "），放行原请求 → 极氪会显示绑定页");
     if (NOTIFY) $notification.post("充电桩修改：银河token已过期", "请打开一次银河App家充桩页刷新token，再回极氪查看", "");
     $done({});
     return;
@@ -295,6 +295,13 @@ try {
   // 保留浏览器 Origin，供 charge_capture_galaxy.js 回写 Access-Control-Allow-Origin
   headers["Origin"] = String(reqHeaders["origin"] || "https://c-h5-prod.haohanpower.tech");
   console.log("[charge] 改道 " + path + " -> " + rule.path);
+  if (NOTIFY) {
+    var notified = $persistentStore.read("galaxyRedirectNotified") || "";
+    if (!notified) {
+      $notification.post("充电桩修改：改道已生效", path + " → " + rule.path + "（页面数据来自银河）", "");
+      $persistentStore.write("1", "galaxyRedirectNotified");
+    }
+  }
   $done({
     url: API_HOST + rule.path,
     headers: headers,

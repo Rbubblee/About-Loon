@@ -1,5 +1,5 @@
 #!name=充电桩修改
-#!desc=极氪App家充桩页面实时显示银河家充桩数据（v6：请求改道——极氪H5设备请求直接改写为银河接口，原生签名+token，真·实时且不依赖Loon脚本网络）。建议先打开一次银河App家充桩页以获取token。
+#!desc=极氪App家充桩页面实时显示银河家充桩数据（v6.1：请求改道+改道生效/失败明确通知；进绑定页=token缺失或改道未触发）。建议先打开一次银河App家充桩页以获取token。
 #!homepage=https://github.com/Rbubblee/About-Loon/blob/main/Plugin/充电桩修改.lpx
 #!system=iOS,iPadOS
 #!system_version=15
