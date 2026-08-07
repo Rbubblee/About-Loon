@@ -1,11 +1,11 @@
 // ============================================================
-// charge_refresh_galaxy.js  v1（cron 定时刷新，准实时）
+// charge_refresh_galaxy.js  v1.1（cron 定时刷新，准实时）
 // 每 30 秒用银河【原生密钥】签名拉取业务接口，把实时数据写入 gx_<key>，
 // 供 charge_inject_zeekr.js 直接注入（页面加载读新鲜缓存，秒开）。
 //
-// 与 v4 的区别：实时拉取从"响应脚本内 $httpClient"挪到 cron 定时任务，
-// 避免 Loon http-response 内发网络请求的稳定性问题；数据最旧 30 秒，
-// 接近实时。token 由 charge_capture_galaxy.js 在银河App打开时抓取
+// v1.1：移除 node=DIRECT 参数（默认路由跟随系统，避免策略名不可用导致
+//       空错误）；错误日志改为原样输出 err 内容，便于判断网络是否真的发出。
+// token 由 charge_capture_galaxy.js 在银河App打开时抓取
 // （约 30 分钟有效，过期后本脚本自动停刷并保留旧缓存）。
 //
 // 密钥来源：开源项目 evse-hub-ha（吉利银河/浩瀚能源 HA 集成），
@@ -246,6 +246,8 @@ try {
   }
   if (targets.length === 0) { $done({}); return; }
 
+  console.log("[charge] cron 开始刷新，目标接口 " + targets.length + " 个（全量=" + doFull + "）");
+
   var doneCount = 0;
   var failCount = 0;
   var successAny = false;
@@ -271,8 +273,7 @@ try {
         url: API_HOST + ep.path,
         headers: headers,
         body: bodyStr,
-        timeout: 10000,
-        node: "DIRECT"
+        timeout: 10000
       }, function (err, resp, data) {
         try {
           if (!err && resp && resp.statusCode === 200 && data) {
@@ -296,7 +297,7 @@ try {
             }
           } else {
             failCount++;
-            console.log("[charge] cron " + ep.key + " 请求失败 err=" + String(err || "") + " status=" + (resp ? resp.statusCode : ""));
+            console.log("[charge] cron " + ep.key + " 请求失败 err=[" + String(err) + "] status=" + (resp ? resp.statusCode : "无"));
           }
         } catch (e) {
           failCount++;

@@ -1,5 +1,5 @@
 #!name=充电桩修改
-#!desc=极氪App家充桩页面实时显示银河家充桩数据（v5：cron每30秒原生签名刷新+响应注入；修复timeout单位错误；token过期自动回退缓存）。建议先打开一次银河App家充桩页以获取token。
+#!desc=极氪App家充桩页面显示银河家充桩数据（v5.1：cron每30秒原生签名刷新+纯缓存注入，响应脚本零网络最稳定；token过期自动回退旧缓存）。建议先打开一次银河App家充桩页以获取token。
 #!homepage=https://github.com/Rbubblee/About-Loon/blob/main/Plugin/充电桩修改.lpx
 #!system=iOS,iPadOS
 #!system_version=15
@@ -22,6 +22,8 @@ http-response ^https:\/\/sea-home-prod\.haohanpower\.tech\/app\/equipment\/.*$ s
 http-response ^https:\/\/api-recharge\.geely\.com\/.*$ script-path=https://raw.githubusercontent.com/Rbubblee/About-Loon/main/Script/charge_capture_galaxy.js, requires-body=true, timeout=10, tag=charge.capture, enable={captureData}, argument=[{notify}]
 ; 定时刷新：每30秒用原生签名拉取银河实时数据写入缓存（无需打开银河App，token有效期内持续）
 cron "*/30 * * * * *" script-path=https://raw.githubusercontent.com/Rbubblee/About-Loon/main/Script/charge_refresh_galaxy.js, tag=charge.refresh, enable={autoRefresh}
+; 手动刷新：在Loon脚本页面点一下立即拉取银河数据（调试用）
+generic script-path=https://raw.githubusercontent.com/Rbubblee/About-Loon/main/Script/charge_refresh_galaxy.js, tag=charge.manual, img-url=bolt.fill, enable={autoRefresh}
 
 [MitM]
 hostname = sea-home-prod.haohanpower.tech, api-recharge.geely.com

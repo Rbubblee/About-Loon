@@ -1,22 +1,21 @@
 // ============================================================
-// charge_inject_zeekr.js  v5（实时注入 + 新鲜缓存快速路径）
-// 极氪家充桩H5 发出设备类请求时，现场用银河【原生密钥】签名调用
-// api-recharge.geely.com，把【实时】响应注入极氪H5响应。
-// v5 变更：
-//   1. 修复 $httpClient timeout 单位错误（Loon 官方单位是毫秒，12 -> 10000）
-//   2. 请求强制 node=DIRECT 直连（银河接口为国内域名）
-//   3. 修复 $done 返回格式：http-response 必须用
-//      $done({response:{status,headers,body}})，v4 的顶层 statusCode 会被
-//      Loon 忽略导致注入不生效（页面显示旧数据）
-//   4. 新增新鲜缓存快速路径：cron（charge_refresh_galaxy.js）每 30 秒刷新
-//      gx_<key>，若缓存新鲜则直接注入、不再发网络请求，页面秒开；
-//      缓存不新鲜时才现场实时拉取，失败再回退旧缓存/种子数据。
+// charge_inject_zeekr.js  v5.1（纯缓存注入，零网络）
+// 极氪家充桩H5 发出设备类请求时，直接读取 charge_refresh_galaxy.js
+// （cron 每 30 秒）刷新到 persistentStore 的 gx_<key> 缓存并注入响应。
+//
+// v5.1 变更：
+//   1. 移除 http-response 内的 $httpClient 实时拉取——Loon 的 http-response
+//      上下文里发网络请求不可靠（实测 err 为空即被静默掐断），
+//      响应路径改为"零网络"：只读缓存/种子，页面秒开且稳定。
+//   2. 实时性完全交给 cron（charge_refresh_galaxy.js 每 30s 刷新），
+//      数据最旧 30 秒，仍接近实时。
+//   3. 日志给出缓存时间/缺失提示，方便判断 cron 是否在跑。
 //
 // 密钥来源：开源项目 evse-hub-ha（吉利银河/浩瀚能源 HA 集成），
 //          已用抓包真实请求验证：复算签名与抓包 x-ca-signature 逐字节一致。
-// 依赖：charge_capture_galaxy.js 保存 galaxyRechargeToken / galaxyUserId /
-//       galaxyTokenExpiresAt / galaxyLastEquipmentId / galaxyLastProviderNo。
-// 降级：token 缺失/过期或实时调用失败时，回退到缓存快照（gx_<key>）或种子数据。
+// 依赖：charge_capture_galaxy.js 保存 token/userId（银河App打开时）；
+//       charge_refresh_galaxy.js 每 30s 用原生签名刷新 gx_<key>。
+// 降级：无缓存时回退内置种子数据（设备列表）；无映射接口弹通知。
 // ============================================================
 
 var NOTIFY = String(($argument || [])[0]) !== "false";
@@ -25,7 +24,6 @@ var RECHARGE_KEY = "204195485";
 var RECHARGE_SECRET = "CqPwP83wzdjesmLeDuzK6SljsYN5PvRM";
 var API_HOST = "https://api-recharge.geely.com";
 var UA = "GeelyGalaxy/1.54.0 (com.geelygalaxy.customer; build:15400077; iOS 26.6.0) Alamofire/5.11.1";
-var REFRESH_FRESH_MS = 35000; // cron 每 30s 刷新一次，35s 内的缓存视为新鲜
 
 // ---------------- 纯 JS：MD5 / SHA-256 / HMAC-SHA256 / Base64 ----------------
 function md5hex(input) {
@@ -260,14 +258,6 @@ try {
     return;
   }
 
-  var token = $persistentStore.read("galaxyRechargeToken") || "";
-  var userId = $persistentStore.read("galaxyUserId") || "";
-  var expiresAt = parseInt($persistentStore.read("galaxyTokenExpiresAt") || "0", 10);
-  var eq = $persistentStore.read("galaxyLastEquipmentId") || "";
-  var provider = $persistentStore.read("galaxyLastProviderNo") || "DIRECT_WDZ";
-  var now = Math.floor(Date.now() / 1000);
-  var tokenOk = !!token && !!userId && (!expiresAt || now < expiresAt - 60);
-
   function finish(body, from) {
     var headers = $response.headers || {};
     headers["content-type"] = "application/json";
@@ -284,71 +274,21 @@ try {
 
   function fallback() {
     var cached = $persistentStore.read("gx_" + rule.key);
-    if (cached) { finish(cached, "缓存"); return; }
+    if (cached) {
+      var updatedAt = parseInt($persistentStore.read("galaxyLastUpdatedAt") || "0", 10);
+      var ageSec = updatedAt > 0 ? Math.max(0, Math.round((Date.now() - updatedAt) / 1000)) : -1;
+      finish(cached, ageSec >= 0 ? "缓存 " + ageSec + "s" : "缓存(时间未知)");
+      return;
+    }
     var seed = SEED[rule.key];
     if (seed) { finish(seed, "种子"); return; }
-    console.log("[charge] 无数据可注入: " + path);
+    console.log("[charge] 无数据可注入: " + path + "（请先打开银河App或等cron刷新）");
     if (NOTIFY) $notification.post("充电桩修改：无数据", path + "（请先打开一次银河App）", "");
     $done({});
   }
 
-  // 新鲜缓存快速路径：cron 刚刷新的数据直接用，页面加载不阻塞不发请求
-  function tryFreshCache() {
-    var cached = $persistentStore.read("gx_" + rule.key);
-    if (!cached) return false;
-    var updatedAt = parseInt($persistentStore.read("galaxyLastUpdatedAt") || "0", 10);
-    var ageMs = Date.now() - updatedAt;
-    if (updatedAt > 0 && ageMs <= REFRESH_FRESH_MS) {
-      finish(cached, "缓存 " + Math.max(0, Math.round(ageMs / 1000)) + "s");
-      return true;
-    }
-    return false;
-  }
-
-  if (!tokenOk) {
-    console.log("[charge] token 缺失或过期 token=" + (token ? "有" : "无") + " userId=" + (userId ? "有" : "无"));
-    if (NOTIFY) $notification.post("充电桩修改：银河token已过期", "请打开一次银河App家充桩页刷新token，再回极氪查看", "");
-    fallback();
-    return;
-  }
-
-  if (tryFreshCache()) return;
-
-  var bodyStr = JSON.stringify(rule.body(userId, eq, provider));
-  var headers = signRecharge("POST", rule.target, bodyStr, token);
-
-  $httpClient.post({
-    url: API_HOST + rule.target,
-    headers: headers,
-    body: bodyStr,
-    timeout: 10000,
-    node: "DIRECT"
-  }, function (err, resp, data) {
-    try {
-      if (!err && resp && resp.statusCode === 200 && data) {
-        var j = JSON.parse(data);
-        if (j.code === "0" || j.code === 0) {
-          if (rule.key === "getMyEquipments") {
-            var list = (j.data && j.data.resultList) || [];
-            if (list.length > 0) {
-              $persistentStore.write(String(list[0].equipmentId || ""), "galaxyLastEquipmentId");
-              $persistentStore.write(String(list[0].providerNo || provider), "galaxyLastProviderNo");
-            }
-          }
-          finish(data, "实时");
-          return;
-        }
-        console.log("[charge] 银河接口异常 " + rule.target + ": " + String(data).slice(0, 200));
-        fallback();
-        return;
-      }
-      console.log("[charge] 实时调用失败 " + rule.target + " err=" + String(err || ""));
-      fallback();
-    } catch (e) {
-      console.log("[charge] 回调异常: " + (e && e.message ? e.message : String(e)));
-      fallback();
-    }
-  });
+  // v5.1：响应脚本零网络，直接读缓存/种子注入
+  fallback();
 } catch (e) {
   console.log("[charge] 错误: " + (e && e.message ? e.message : String(e)));
   $notification.post("充电桩修改 脚本错误", e && e.message ? e.message : String(e), "");
