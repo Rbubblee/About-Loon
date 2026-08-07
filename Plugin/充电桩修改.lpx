@@ -1,5 +1,5 @@
 #!name=充电桩修改
-#!desc=极氪App家充桩页面显示银河家充桩数据（响应注入，无需伪造签名）。建议先打开一次银河App家充桩页，自动缓存最新数据。
+#!desc=极氪App家充桩页面实时显示银河家充桩数据（v4：原生签名现场调银河接口注入；token 过期自动回退缓存）。建议先打开一次银河App家充桩页以获取token。
 #!homepage=https://github.com/Rbubblee/About-Loon/blob/main/Plugin/充电桩修改.lpx
 #!system=iOS,iPadOS
 #!system_version=15
@@ -15,10 +15,10 @@ captureData=switch,true,tag=打开银河App时自动缓存最新数据
 notify=switch,true,tag=注入/缓存时弹通知
 
 [Script]
-; 极氪H5家充桩接口响应注入（只处理WebView请求，原生App请求自动放行）
+; 极氪H5家充桩接口实时注入（只处理WebView请求，原生App请求自动放行）
 http-response ^https:\/\/sea-home-prod\.haohanpower\.tech\/app\/equipment\/.*$ script-path=https://raw.githubusercontent.com/Rbubblee/About-Loon/main/Script/charge_inject_zeekr.js, requires-body=true, timeout=10, tag=charge.inject, enable={enableInject}, argument=[{notify}]
-; 缓存银河App家充桩接口真实响应（打开银河App家充桩页时刷新）
-http-response ^https:\/\/api-recharge\.geely\.com\/gep\/v[12]\/.*$ script-path=https://raw.githubusercontent.com/Rbubblee/About-Loon/main/Script/charge_capture_galaxy.js, requires-body=true, timeout=10, tag=charge.capture, enable={captureData}, argument=[{notify}]
+; 抓取银河App token/userId/设备信息并缓存响应（打开银河App家充桩页时刷新）
+http-response ^https:\/\/api-recharge\.geely\.com\/.*$ script-path=https://raw.githubusercontent.com/Rbubblee/About-Loon/main/Script/charge_capture_galaxy.js, requires-body=true, timeout=10, tag=charge.capture, enable={captureData}, argument=[{notify}]
 
 [MitM]
 hostname = sea-home-prod.haohanpower.tech, api-recharge.geely.com
