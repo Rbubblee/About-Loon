@@ -1,5 +1,5 @@
 // ============================================================
-// charge_inject_zeekr.js  v8.1（实时响应注入）
+// charge_inject_zeekr.js  v8.2（实时响应注入）
 // 极氪家充桩的设备类接口（sea-home-prod /app/equipment/*）无论原生还是
 // WebView 发出，统一把响应替换为银河数据（实时拉取 / 缓存 gx_<key> / 种子 / 合成）。
 //
@@ -29,6 +29,13 @@
 // 不再等 30 秒 cron）；实时失败/无 token 时回退缓存 gx_<key>，再回退种子。
 // 注：startCharge/stopCharge 等控制接口不做绑定校验，原生框架可用，
 // 读接口的"账号-设备绑定"校验在服务端 DB，只能靠本注入绕过（见文档 C.12）。
+//
+// v8.2（2026-08-10 可验证+加固）：8.10-1 抓包显示注入响应耗时仅 14-19ms
+// （无银河 API 往返），说明跑的仍是缓存——大概率手机还是 v8.0 或 Loon 缓存
+// 旧脚本。本版：
+//   1) 注入响应头加 x-inject-source: 实时|缓存 Ns|种子|合成，来源一眼可辨；
+//   2) 实时拉取自身 try/catch 兜底，任何失败回退缓存/种子，绝不再透传 403；
+//   3) 通知文案带来源（实时/缓存/种子）。
 // ============================================================
 
 var NOTIFY = String(($argument || [])[0]) !== "false";
@@ -301,6 +308,7 @@ try {
     if (synthBody) {
       var headers0 = $response.headers || {};
       headers0["content-type"] = "application/json";
+      headers0["x-inject-source"] = "合成";
       delete headers0["content-encoding"];
       delete headers0["Content-Encoding"];
       delete headers0["content-length"];
@@ -314,6 +322,7 @@ try {
   function finish(body, from) {
     var headers = $response.headers || {};
     headers["content-type"] = "application/json";
+    headers["x-inject-source"] = from;
     delete headers["content-encoding"];
     delete headers["Content-Encoding"];
     delete headers["content-length"];
@@ -343,7 +352,7 @@ try {
     $done({});
   }
 
-  // v8.1：实时优先——每个请求现场拉银河接口注入；失败回退缓存/种子
+  // v8.2：实时优先——每个请求现场拉银河接口注入；失败回退缓存/种子（绝不透传）
   var token = $persistentStore.read("galaxyRechargeToken") || "";
   var userId = $persistentStore.read("galaxyUserId") || "";
   var expiresAt = parseInt($persistentStore.read("galaxyTokenExpiresAt") || "0", 10);
@@ -355,35 +364,40 @@ try {
   if (!canLive) {
     fallback();
   } else {
-    var bodyStr = JSON.stringify(rule.body(userId, eq, provider));
-    var headers = signRecharge("POST", rule.target, bodyStr, token);
-    $httpClient.post({
-      url: API_HOST + rule.target,
-      headers: headers,
-      body: bodyStr,
-      timeout: 5000
-    }, function (err, resp, data) {
-      try {
-        if (!err && resp && resp.statusCode === 200 && data) {
-          var j = JSON.parse(data);
-          if (j.code === "0" || j.code === 0 || j.code === "success") {
-            $persistentStore.write(data, "gx_" + rule.key);
-            $persistentStore.write(String(Date.now()), "galaxyLastUpdatedAt");
-            if (rule.key === "getMyEquipments") {
-              var list = (j.data && j.data.resultList) || [];
-              if (list.length > 0) {
-                $persistentStore.write(String(list[0].equipmentId || ""), "galaxyLastEquipmentId");
-                $persistentStore.write(String(list[0].providerNo || provider), "galaxyLastProviderNo");
+    try {
+      var bodyStr = JSON.stringify(rule.body(userId, eq, provider));
+      var headers = signRecharge("POST", rule.target, bodyStr, token);
+      $httpClient.post({
+        url: API_HOST + rule.target,
+        headers: headers,
+        body: bodyStr,
+        timeout: 5000
+      }, function (err, resp, data) {
+        try {
+          if (!err && resp && resp.statusCode === 200 && data) {
+            var j = JSON.parse(data);
+            if (j.code === "0" || j.code === 0 || j.code === "success") {
+              $persistentStore.write(data, "gx_" + rule.key);
+              $persistentStore.write(String(Date.now()), "galaxyLastUpdatedAt");
+              if (rule.key === "getMyEquipments") {
+                var list = (j.data && j.data.resultList) || [];
+                if (list.length > 0) {
+                  $persistentStore.write(String(list[0].equipmentId || ""), "galaxyLastEquipmentId");
+                  $persistentStore.write(String(list[0].providerNo || provider), "galaxyLastProviderNo");
+                }
               }
+              finish(data, "实时");
+              return;
             }
-            finish(data, "实时");
-            return;
           }
-        }
-      } catch (e) {}
-      console.log("[charge] 实时拉取失败，回退缓存/种子: " + rule.key + " err=" + String(err));
+        } catch (e) {}
+        console.log("[charge] 实时拉取失败，回退缓存/种子: " + rule.key + " err=" + String(err));
+        fallback();
+      });
+    } catch (e) {
+      console.log("[charge] 实时拉取异常，回退缓存/种子: " + rule.key + " " + (e && e.message ? e.message : String(e)));
       fallback();
-    });
+    }
   }
 } catch (e) {
   console.log("[charge] 错误: " + (e && e.message ? e.message : String(e)));
