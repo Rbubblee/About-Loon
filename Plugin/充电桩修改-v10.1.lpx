@@ -1,5 +1,5 @@
 #!name=充电桩修改
-#!desc=极氪App家充桩页面实时显示并操作银河家充桩（v10.1：token常态化 + v9.2 http-response实时/控制转发 + setEquipmentConfigCenter保存映射银河updateMyEquipmentInfo；配置中心合成；头像注入；失败兜底缓存/种子）。建议先网页登录一次获取token。
+#!desc=极氪App家充桩页面实时显示并操作银河家充桩（v10.1：v10.0 token常态化 + v9.2 http-response实时/控制转发 + setEquipmentConfigCenter保存映射到银河updateMyEquipmentInfo；配置中心合成响应；头像字段注入；失败兜底缓存/种子；响应头x-zeekr-live=1/x-inject-source标记来源）。建议先网页登录一次获取token。
 #!homepage=https://github.com/Rbubblee/About-Loon/blob/main/Plugin/充电桩修改.lpx
 #!system=iOS,iPadOS
 #!system_version=15
@@ -22,9 +22,9 @@ http-request ^https:\/\/h5-recharge\.geely\.com\/(api\/v1|gep|galaxy-gw|recharge
 http-response ^https:\/\/h5-recharge\.geely\.com\/(api\/v1|gep|galaxy-gw|recharge-gw)\/.*$ script-path=https://raw.githubusercontent.com/Rbubblee/About-Loon/main/Script/charge_gw_relay.js?v=800, requires-body=true, timeout=15, tag=charge.gw.relay.resp
 ; 网页登录成功后把 token（含 refreshToken 过期时间 + centerToken/centerRefreshToken）写入 Loon persistentStore
 http-response ^https:\/\/h5-recharge\.geely\.com\/store-token.*$ script-path=https://raw.githubusercontent.com/Rbubblee/About-Loon/main/Script/charge_store_token.js?v=1000, requires-body=true, timeout=10, tag=charge.store.token, enable={enableLogin}
-; 实时转发+控制转发主通道：极氪设备/充电类请求 → 脚本内转发银河 api-recharge（原生签名+token）→ 返回实时结果（v9.2：Loon上原生请求只触发http-response，转发逻辑在脚本内按上下文处理）
+; 实时转发+控制转发主通道：极氪设备/充电类请求 → 脚本内转发银河 api-recharge（原生签名+token）→ 返回实时结果
 http-request ^https:\/\/sea-home-prod\.haohanpower\.tech\/app\/equipment\/.*$ script-path=https://raw.githubusercontent.com/Rbubblee/About-Loon/main/Script/charge_inject_zeekr.js?v=903, requires-body=true, timeout=10, tag=charge.zeekr2galaxy, enable={enableInject}
-; 兜底注入/实时转发（v9.2 主战场：http-response 上下文完成实时转发+控制转发+缓存/种子/合成兜底）
+; 兜底注入+实时/控制转发（v9.2 主通道）：http-response 阶段同样转发银河，失败才兜底缓存/种子/合成，保证极氪App不报错
 http-response ^https:\/\/sea-home-prod\.haohanpower\.tech\/app\/equipment\/.*$ script-path=https://raw.githubusercontent.com/Rbubblee/About-Loon/main/Script/charge_inject_zeekr.js?v=903, requires-body=true, timeout=10, tag=charge.inject, enable={enableInject}, argument=[{notify}]
 ; 银河接口调试页
 http-response ^https:\/\/h5-recharge\.geely\.com\/debug-galaxy.*$ script-path=https://raw.githubusercontent.com/Rbubblee/About-Loon/main/Script/charge_debug_page.js?v=800, requires-body=true, timeout=10, tag=charge.debug, enable={enableDebug}, argument=[{notify}]

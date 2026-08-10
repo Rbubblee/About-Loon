@@ -38,6 +38,12 @@
 //      headImgUrl + userName/nickname），保留真实 URL（公网可达），兼容
 //      极氪原生/WebView 不同字段名；列表项从详情缓存带出 owner 信息。
 //
+// v9.2.1 变更（2026-08-10，依据用户 Loon 日志）：
+//   新增 setEquipmentConfigCenter（设备配置中心“保存”）→ 银河
+//   /gep/v2/home/charge/updateMyEquipmentInfo 控制转发：极氪配置中心改
+//   设备名/联网服务等提交时，真实写入银河（body 复制极氪字段，sourceTypeKey
+//   换 0010000 并补 userId）；失败放行原生后端并弹通知，便于抓包校准字段。
+//
 // v7.0 变更（修复"点击充电桩进入绑定页"）：
 //   1. 去掉 isH5 过滤：原生 ZeekrLife（Alamofire）请求同样注入——原生家充桩
 //      首页（hh_energy://page/wallbox/homeCharge）的设备列表就是原生 getMyEquipments，
@@ -405,7 +411,8 @@ MAP["/app/equipment/v2/manage/getEquipmentConfigCenter"] = {
 // 请求体同 startCharge（可带 orderId）；首次使用后请核对银河 App 日志/抓包校准。
 var CONTROL_MAP = {
   "/app/equipment/v2/charge/startCharge": { key: "startCharge", target: "/gep/v1/home/charge/startCharge" },
-  "/app/equipment/v2/charge/stopCharge": { key: "stopCharge", target: "/gep/v1/home/charge/stopCharge" }
+  "/app/equipment/v2/charge/stopCharge": { key: "stopCharge", target: "/gep/v1/home/charge/stopCharge" },
+  "/app/equipment/v2/manage/setEquipmentConfigCenter": { key: "setEquipmentConfigCenter", target: "/gep/v2/home/charge/updateMyEquipmentInfo" }
 };
 
 function buildControlBody(incomingBodyStr, userId) {
@@ -592,7 +599,8 @@ function relayControl(path, control, isResponse) {
           var j = JSON.parse(data);
           if (j.code === "0" || j.code === 0 || j.code === "success") {
             respond(200, { "content-type": "application/json", "x-zeekr-live": "1" }, data, isResponse);
-            if (NOTIFY) $notification.post("充电桩修改：操作已下发", control.key + " 成功（银河 orderId=" + ((j.data && j.data.orderId) || "?") + "）", "");
+            var oid = (j.data && j.data.orderId) || "";
+            if (NOTIFY) $notification.post("充电桩修改：操作已下发", control.key + " 成功" + (oid ? "（银河 orderId=" + oid + "）" : ""), "");
             return;
           }
           // 银河返回业务错误（如桩离线/未插枪）：把真实结果回给极氪页面显示
