@@ -1,5 +1,9 @@
 // ============================================================
-// charge_galaxy_login.js  v1.0（银河账号网页登录页，替代银河App）
+// charge_galaxy_login.js  v1.1（银河账号网页登录页，替代银河App）
+//
+// v1.1（2026-08-10）：把「获取安全配置失败：{}」的提示按根因分级——
+//   无 relay: 标记 → relay 规则未生效（旧插件/未删除重加/enableGwRelay 关）；
+//   relay host=h5-recharge → Loon 缓存了旧版 relay（需 ?v= 升版强制刷新）。
 //
 // 挂在 https://h5-recharge.geely.com/galaxy-login 下；两个网关的请求都走
 // charge_gw_relay.js 同源代理（/galaxy-gw、/recharge-gw），绕开网关对
@@ -47,6 +51,7 @@ pre{white-space:pre-wrap;word-break:break-all;font-size:11px;background:#0b1019;
 <h1>银河账号登录（替代银河App）</h1>
 <div class="meta">页面来源：<span id="origin"></span>（必须为 https://h5-recharge.geely.com）</div>
 <div class="meta" id="sessionInfo">尚未登录</div>
+<div class="meta">登录页脚本 v1.1 · 需配套 relay v3.0+（Host 修复，v7.8.2 起）</div>
 <input id="mobile" type="tel" placeholder="手机号" inputmode="numeric">
 <button id="btnGetCode">获取短信验证码（先滑块验证）</button>
 <div id="geetest-wrap"></div>
@@ -392,7 +397,13 @@ async function loadGeetest() {
     if (cfg._html || (cfg._raw && /<html|<head|nginx|Forbidden/i.test(cfg._raw))) {
       hint = "（返回的是 nginx HTML：说明 Loon 没有把 h5-recharge 的 /api/v1/ 或 /gep/ 请求改写到真实网关，同源代理未生效。请把插件删除后重新添加，并确认 enableGwRelay=开、Loon 已启动）";
     } else if (cfg._status === 200 && cfg._raw === "{}") {
-      hint = "（网关返回空对象 {}：多为 Host/路由问题，见下方 relay 诊断）";
+      if (!cfg._relayDebug) {
+        hint = "（返回 200 空对象 {} 且没有 relay 标记：请求没有被 charge_gw_relay.js 接管——请确认 Loon 插件已删除旧版并重新添加 v7.8.4，且 enableGwRelay=开；若脚本 URL 不带 ?v=784 说明插件还是旧的）";
+      } else if (cfg._relayDebug.indexOf("host=h5-recharge") >= 0) {
+        hint = "（relay 已运行但转发时 Host 仍是 h5-recharge.geely.com：Loon 缓存了旧版 relay 脚本，请删除插件重新添加，确保脚本 URL 带 ?v=784）";
+      } else {
+        hint = "（relay 已转发到真实网关但上游仍返回空对象，见下方 relay 诊断）";
+      }
     } else if (cfg._status === 403 || cfg.code === "403") {
       hint = "（网关返回 403：签名/Date 或权限问题，见下方 relay 诊断）";
     }
