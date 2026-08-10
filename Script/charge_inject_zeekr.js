@@ -1,7 +1,11 @@
 // ============================================================
-// charge_inject_zeekr.js  v8.2（实时响应注入）
+// charge_inject_zeekr.js  v9.0（实时转发 + 兜底注入，上下文自适应）
 // 极氪家充桩的设备类接口（sea-home-prod /app/equipment/*）无论原生还是
-// WebView 发出，统一把响应替换为银河数据（实时拉取 / 缓存 gx_<key> / 种子 / 合成）。
+// WebView 发出：
+//   - http-request 上下文（主通道）：直接转发到银河 api-recharge，返回实时数据
+//     （响应头 x-zeekr-live: 1），不再读历史缓存；
+//   - http-response 上下文（兜底）：仅当实时转发失败/未映射/合成接口时，
+//     用缓存 gx_<key> / 种子 / 合成响应填充，保证极氪App不因无数据报错。
 //
 // v7.0 变更（修复"点击充电桩进入绑定页"）：
 //   1. 去掉 isH5 过滤：原生 ZeekrLife（Alamofire）请求同样注入——原生家充桩
@@ -30,12 +34,13 @@
 // 注：startCharge/stopCharge 等控制接口不做绑定校验，原生框架可用，
 // 读接口的"账号-设备绑定"校验在服务端 DB，只能靠本注入绕过（见文档 C.12）。
 //
-// v8.2（2026-08-10 可验证+加固）：8.10-1 抓包显示注入响应耗时仅 14-19ms
-// （无银河 API 往返），说明跑的仍是缓存——大概率手机还是 v8.0 或 Loon 缓存
-// 旧脚本。本版：
-//   1) 注入响应头加 x-inject-source: 实时|缓存 Ns|种子|合成，来源一眼可辨；
-//   2) 实时拉取自身 try/catch 兜底，任何失败回退缓存/种子，绝不再透传 403；
-//   3) 通知文案带来源（实时/缓存/种子）。
+// v9.0（2026-08-10 方案切换）：放弃"http-response 读缓存"作为主通道，
+// 改为 http-request 阶段脚本内转发银河接口（与登录页 relay 同机制，
+// $httpClient 在 http-request 上下文已验证可用；脚本内转发无 Origin/CORS 问题）。
+//   1) 已映射读接口 → 实时转发银河，成功即返回（x-zeekr-live: 1）；
+//   2) 转发失败/无token/未映射/合成/控制类 → 放行，由 http-response 兜底
+//      （缓存/种子/合成），极氪App不会显示错误；
+//   3) 兜底注入响应头仍带 x-inject-source: 缓存 Ns|种子|合成，来源可辨。
 // ============================================================
 
 var NOTIFY = String(($argument || [])[0]) !== "false";
@@ -283,8 +288,79 @@ var SEED = {
   "getEquipmentExt": '{"code":"0","message":"SUCCESS","data":{"equipmentId":"00000000000","equipmentName":"我的家桩","hardwareVersion":"","softwareVersion":"","activeDate":"","warrantyRestDays":null,"iccId":"","sim":"","simRestDays":null,"isNetworkService":0,"isShowSetEquipmentName":1,"isShowNetworkService":1,"manufacturerPhone":"4001876000"}}'
 };
 
+// ---------------- 工具 ----------------
+function getHeader(headers, name) {
+  if (!headers) return "";
+  var lower = name.toLowerCase();
+  for (var k in headers) { if (k.toLowerCase() === lower) return headers[k]; }
+  return "";
+}
+
+// ---------------- http-request 主通道：实时转发银河接口 ----------------
+function relayLive() {
+  var method = String($request.method || "POST").toUpperCase();
+  if (method !== "POST") { $done({}); return; } // OPTIONS 预检等放行
+  var url = $request.url || "";
+  var path = url.replace(/^https?:\/\/[^/]+/, "").split("?")[0];
+  var rule = MAP[path];
+  if (!rule || rule.synthetic) { $done({}); return; } // 未映射/合成/控制类放行
+  var token = $persistentStore.read("galaxyRechargeToken") || "";
+  var userId = $persistentStore.read("galaxyUserId") || "";
+  var expiresAt = parseInt($persistentStore.read("galaxyTokenExpiresAt") || "0", 10);
+  var nowSec = Math.floor(Date.now() / 1000);
+  if (!token || !userId || (expiresAt && nowSec > expiresAt - 60)) { $done({}); return; }
+  var eq = $persistentStore.read("galaxyLastEquipmentId") || "";
+  var provider = $persistentStore.read("galaxyLastProviderNo") || "DIRECT_WDZ";
+  try {
+    var bodyStr = JSON.stringify(rule.body(userId, eq, provider));
+    var headers = signRecharge("POST", rule.target, bodyStr, token);
+    $httpClient.post({
+      url: API_HOST + rule.target,
+      headers: headers,
+      body: bodyStr,
+      timeout: 5000
+    }, function (err, resp, data) {
+      try {
+        if (!err && resp && resp.statusCode === 200 && data) {
+          var j = JSON.parse(data);
+          if (j.code === "0" || j.code === 0 || j.code === "success") {
+            $persistentStore.write(data, "gx_" + rule.key);
+            $persistentStore.write(String(Date.now()), "galaxyLastUpdatedAt");
+            if (rule.key === "getMyEquipments") {
+              var list = (j.data && j.data.resultList) || [];
+              if (list.length > 0) {
+                $persistentStore.write(String(list[0].equipmentId || ""), "galaxyLastEquipmentId");
+                $persistentStore.write(String(list[0].providerNo || provider), "galaxyLastProviderNo");
+              }
+            }
+            var outH = { "content-type": "application/json", "x-zeekr-live": "1" };
+            console.log("[charge] 实时转发 " + path + " -> " + rule.target);
+            $done({ response: { status: 200, headers: outH, body: data } });
+            return;
+          }
+        }
+      } catch (e) {}
+      console.log("[charge] 实时转发失败，放行兜底: " + rule.key + " err=" + String(err));
+      $done({});
+    });
+  } catch (e) {
+    console.log("[charge] 实时转发异常，放行兜底: " + rule.key);
+    $done({});
+  }
+}
+
 // ---------------- 主流程 ----------------
 try {
+  var isResponse = (typeof $response !== "undefined") && $response;
+  if (!isResponse) {
+    relayLive();
+    return;
+  }
+  // 实时转发（http-request）已返回银河实时数据，兜底注入不再处理
+  if (getHeader(($response && $response.headers) || {}, "x-zeekr-live")) {
+    $done({});
+    return;
+  }
   var method = String($request.method || "POST").toUpperCase();
   if (method !== "POST") {
     console.log("[charge] 非POST（CORS预检等），放行: " + method);
@@ -352,53 +428,8 @@ try {
     $done({});
   }
 
-  // v8.2：实时优先——每个请求现场拉银河接口注入；失败回退缓存/种子（绝不透传）
-  var token = $persistentStore.read("galaxyRechargeToken") || "";
-  var userId = $persistentStore.read("galaxyUserId") || "";
-  var expiresAt = parseInt($persistentStore.read("galaxyTokenExpiresAt") || "0", 10);
-  var nowSec = Math.floor(Date.now() / 1000);
-  var eq = $persistentStore.read("galaxyLastEquipmentId") || "";
-  var provider = $persistentStore.read("galaxyLastProviderNo") || "DIRECT_WDZ";
-  var canLive = !!(token && userId && (!expiresAt || nowSec <= expiresAt - 60));
-
-  if (!canLive) {
-    fallback();
-  } else {
-    try {
-      var bodyStr = JSON.stringify(rule.body(userId, eq, provider));
-      var headers = signRecharge("POST", rule.target, bodyStr, token);
-      $httpClient.post({
-        url: API_HOST + rule.target,
-        headers: headers,
-        body: bodyStr,
-        timeout: 5000
-      }, function (err, resp, data) {
-        try {
-          if (!err && resp && resp.statusCode === 200 && data) {
-            var j = JSON.parse(data);
-            if (j.code === "0" || j.code === 0 || j.code === "success") {
-              $persistentStore.write(data, "gx_" + rule.key);
-              $persistentStore.write(String(Date.now()), "galaxyLastUpdatedAt");
-              if (rule.key === "getMyEquipments") {
-                var list = (j.data && j.data.resultList) || [];
-                if (list.length > 0) {
-                  $persistentStore.write(String(list[0].equipmentId || ""), "galaxyLastEquipmentId");
-                  $persistentStore.write(String(list[0].providerNo || provider), "galaxyLastProviderNo");
-                }
-              }
-              finish(data, "实时");
-              return;
-            }
-          }
-        } catch (e) {}
-        console.log("[charge] 实时拉取失败，回退缓存/种子: " + rule.key + " err=" + String(err));
-        fallback();
-      });
-    } catch (e) {
-      console.log("[charge] 实时拉取异常，回退缓存/种子: " + rule.key + " " + (e && e.message ? e.message : String(e)));
-      fallback();
-    }
-  }
+  // v9.0：实时转发已由 http-request 上下文（relayLive）完成；此处纯兜底
+  fallback();
 } catch (e) {
   console.log("[charge] 错误: " + (e && e.message ? e.message : String(e)));
   $notification.post("充电桩修改 脚本错误", e && e.message ? e.message : String(e), "");
