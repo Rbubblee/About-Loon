@@ -33,6 +33,7 @@ try {
     }
     if (j.centerToken) $persistentStore.write(String(j.centerToken), "galaxyCenterToken");
     if (j.centerRefreshToken) $persistentStore.write(String(j.centerRefreshToken), "galaxyCenterRefreshToken");
+    if (j.deviceSN) $persistentStore.write(String(j.deviceSN), "galaxyDeviceSN");
     console.log("[charge] 网页登录 token 已写入 Loon");
     $notification.post("充电桩修改：银河token已更新", "来自网页登录（约30分钟有效）", "");
   } else {

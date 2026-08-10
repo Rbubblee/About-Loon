@@ -1,5 +1,5 @@
 #!name=充电桩修改
-#!desc=极氪App家充桩页面实时显示并操作银河家充桩（v10.3：token按需刷新——点按钮/进页面时若token过期自动换新，无需手动重登；含按钮启用字段/极氪头像/智能刷新/配置中心映射）。建议先网页登录一次获取token。
+#!desc=极氪App家充桩页面实时显示并操作银河家充桩（v10.3：token按需刷新——点按钮/进页面时若token过期自动走login/refresh→oauth2/code→getTokenByCode换新，无需手动重登；含v10.2按钮启用字段/极氪头像/智能刷新/配置中心映射）。建议先网页登录一次获取token。
 #!homepage=https://github.com/Rbubblee/About-Loon/blob/main/Plugin/充电桩修改.lpx
 #!system=iOS,iPadOS
 #!system_version=15
@@ -11,7 +11,7 @@
 
 [Argument]
 enableInject=switch,true,tag=注入银河数据到极氪家充桩页面
-autoRefresh=switch,true,tag=每30秒自动刷新银河数据（准实时，状态来源）
+autoRefresh=switch,true,tag=自动刷新银河数据（活跃30s/空闲10分钟，进页面实时转发）
 enableLogin=switch,true,tag=银河账号网页登录页（h5-recharge.geely.com/galaxy-login）
 enableDebug=switch,false,tag=银河接口调试页（h5-recharge.geely.com/debug-galaxy）
 notify=switch,true,tag=操作时弹通知
@@ -20,14 +20,13 @@ notify=switch,true,tag=操作时弹通知
 ; 同源代理（恒开）：登录页/调试页的 /api/v1、/gep 请求转发到真实网关，补回浏览器剥离的 Date/UA/Host/gl_user_id
 http-request ^https:\/\/h5-recharge\.geely\.com\/(api\/v1|gep|galaxy-gw|recharge-gw)\/.*$ script-path=https://raw.githubusercontent.com/Rbubblee/About-Loon/main/Script/charge_gw_relay.js?v=800, requires-body=true, timeout=15, tag=charge.gw.relay.req
 http-response ^https:\/\/h5-recharge\.geely\.com\/(api\/v1|gep|galaxy-gw|recharge-gw)\/.*$ script-path=https://raw.githubusercontent.com/Rbubblee/About-Loon/main/Script/charge_gw_relay.js?v=800, requires-body=true, timeout=15, tag=charge.gw.relay.resp
-; 网页登录成功后把 token（含 refreshToken 过期时间 + centerToken/centerRefreshToken）写入 Loon persistentStore
+; 网页登录成功后把 token（含 refreshToken 过期时间 + centerToken/centerRefreshToken/deviceSN）写入 Loon persistentStore
 http-response ^https:\/\/h5-recharge\.geely\.com\/store-token.*$ script-path=https://raw.githubusercontent.com/Rbubblee/About-Loon/main/Script/charge_store_token.js?v=1003, requires-body=true, timeout=10, tag=charge.store.token, enable={enableLogin}
-; 实时转发+控制转发主通道：极氪设备/充电类请求 → 脚本内转发银河 api-recharge（原生签名+token）→ 返回实时结果（v9.2：Loon上原生请求只触发http-response，转发逻辑在脚本内按上下文处理）
 ; 抓取极氪账号头像/昵称（用户信息接口旁路记录，不改响应）
 http-response ^https:\/\/api-gw-toc\.zeekrlife\.com\/zeekrlife-app-user\/v1\/user\/info\/(query|home).*$ script-path=https://raw.githubusercontent.com/Rbubblee/About-Loon/main/Script/charge_capture_zeekr.js?v=1002, requires-body=true, timeout=10, tag=charge.zeekr.userinfo
-; 实时转发+控制转发主通道：极氪设备/充电类请求 → 脚本内转发银河 api-recharge（原生签名+token）→ 返回实时结果
+; 实时转发+控制转发主通道：极氪设备/充电类请求 → 脚本内转发银河 api-recharge（原生签名+token）→ 返回实时结果；token过期自动按需刷新
 http-request ^https:\/\/sea-home-prod\.haohanpower\.tech\/app\/equipment\/.*$ script-path=https://raw.githubusercontent.com/Rbubblee/About-Loon/main/Script/charge_inject_zeekr.js?v=905, requires-body=true, timeout=15, tag=charge.zeekr2galaxy, enable={enableInject}
-; 兜底注入/实时转发（v9.2 主战场：http-response 上下文完成实时转发+控制转发+缓存/种子/合成兜底）
+; 兜底注入+实时/控制转发（主通道）：http-response 阶段同样转发银河，失败才兜底缓存/种子/合成，保证极氪App不报错
 http-response ^https:\/\/sea-home-prod\.haohanpower\.tech\/app\/equipment\/.*$ script-path=https://raw.githubusercontent.com/Rbubblee/About-Loon/main/Script/charge_inject_zeekr.js?v=905, requires-body=true, timeout=15, tag=charge.inject, enable={enableInject}, argument=[{notify}]
 ; 银河接口调试页
 http-response ^https:\/\/h5-recharge\.geely\.com\/debug-galaxy.*$ script-path=https://raw.githubusercontent.com/Rbubblee/About-Loon/main/Script/charge_debug_page.js?v=800, requires-body=true, timeout=10, tag=charge.debug, enable={enableDebug}, argument=[{notify}]

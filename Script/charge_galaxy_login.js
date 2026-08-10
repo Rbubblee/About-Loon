@@ -520,6 +520,9 @@ $("btnLogin").onclick = async function () {
   var centerToken = login.data.centerTokenDto.token;
   var centerRefreshToken = (login.data.centerTokenDto && login.data.centerTokenDto.refreshToken) || "";
   var glUserId = String(login.data.centerUserInfoDto.id || "");
+  // 设备标识（suyunkai/geely-galaxy-assistant 的 deviceSN=hardwareDeviceId，
+  // 安卓 key 刷新 /api/v1/login/refresh 时需要，先存备用）
+  var deviceSN = String((login.data && login.data.hardwareDeviceId) || "");
 
   // 5. oauth2/code（query 按字母序，scope 逗号不编码）
   var oauthPath = "/api/v1/oauth2/code?client_id=" + OAUTH_CLIENT_ID + "&response_type=code&scope=snsapiUserinfo,snsapiMobile";
@@ -542,7 +545,8 @@ $("btnLogin").onclick = async function () {
     authToken: d.authToken,
     refreshToken: d.refreshToken || "",
     authExpiresAt: authExp,
-    refreshExpiresAt: refreshExp
+    refreshExpiresAt: refreshExp,
+    deviceSN: deviceSN
   });
   // 同步写入中继/调试页读取的键
   try {
@@ -554,7 +558,7 @@ $("btnLogin").onclick = async function () {
     await fetch("https://h5-recharge.geely.com/store-token", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ authToken: d.authToken, refreshToken: d.refreshToken || "", userId: glUserId, expiresAt: Math.floor(authExp / 1000), refreshExpiresAt: Math.floor(refreshExp / 1000), centerToken: centerToken, centerRefreshToken: centerRefreshToken })
+      body: JSON.stringify({ authToken: d.authToken, refreshToken: d.refreshToken || "", userId: glUserId, expiresAt: Math.floor(authExp / 1000), refreshExpiresAt: Math.floor(refreshExp / 1000), centerToken: centerToken, centerRefreshToken: centerRefreshToken, deviceSN: deviceSN })
     });
   } catch (e) {}
   $("sessionInfo").textContent = "登录成功：user_id=" + glUserId;

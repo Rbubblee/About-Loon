@@ -285,6 +285,124 @@ function signRecharge(method, path, bodyStr, token) {
   return headers;
 }
 
+// ---------------- 按需刷新 recharge token（v9.2.3）----------------
+// galaxy-user-api 签名（iOS key，与网页登录页一致）。与 charge_refresh_galaxy.js
+// v1.5 常态化刷新同一链路：/api/v1/login/refresh → oauth2/code → getTokenByCode。
+// 若 /login/refresh 被拒（Android key 场景），Loon 日志会打失败原因，
+// 届时再切 suyunkai/geely-galaxy-assistant 的安卓 key(204179735)+deviceSN 参数。
+var GALAXY_KEY = "204925390";
+var GALAXY_SECRET = "bVy52qsT6U5ElPOZN4vTkhnMdzedMjx6";
+var GALAXY_HOST = "https://galaxy-user-api.geely.com";
+
+function galaxySign(method, path, bodyStr, glUserId, token) {
+  var accept = "application/json";
+  var ct = "application/json; charset=UTF-8";
+  var md5 = bodyStr ? b64encode(md5bytes(bodyStr)) : "1B2M2Y8AsgTpgAmY7PhCfg==";
+  var nonce = uuidv4();
+  var ts = String(Date.now());
+  var date = httpDateGMT8();
+  var hdrs = [
+    ["X-Ca-Key", GALAXY_KEY],
+    ["X-Ca-Nonce", nonce],
+    ["X-Ca-Signature-Method", "HmacSHA256"],
+    ["X-Ca-Timestamp", ts],
+    ["X-Ca-Version", "1"],
+    ["gl_user_id", glUserId || ""]
+  ];
+  if (token) hdrs.push(["token", token]);
+  var sigHdrs = "";
+  for (var i = 0; i < hdrs.length; i++) sigHdrs += (i ? "," : "") + hdrs[i][0];
+  var lines = [method, accept, md5, ct, date];
+  for (i = 0; i < hdrs.length; i++) lines.push(hdrs[i][0] + ":" + hdrs[i][1]);
+  lines.push(path);
+  var sig = b64encode(hmacSha256(GALAXY_SECRET, lines.join("\n")));
+  var headers = {
+    "User-Agent": "CA_iOS_SDK_2.0",
+    "Accept": accept,
+    "Content-Type": ct,
+    "Date": date,
+    "X-Galaxy-Date": date,
+    "Content-MD5": md5,
+    "X-Ca-Signature": sig,
+    "X-Ca-Signature-Headers": sigHdrs,
+    "appId": "galaxy-app",
+    "appVersion": "1.53.0",
+    "platform": "IOS",
+    "tenantId": "569001701001"
+  };
+  for (i = 0; i < hdrs.length; i++) headers[hdrs[i][0]] = hdrs[i][1];
+  return headers;
+}
+
+function refreshTokensOnDemand(cb) {
+  // 1 分钟冷却，避免刷新失败时每个请求都触发慢请求
+  var lastAttempt = parseInt($persistentStore.read("galaxyRefreshAttemptAt") || "0", 10);
+  if (Date.now() - lastAttempt < 60000) { cb(false, "刷新冷却中（1分钟内已尝试）"); return; }
+  $persistentStore.write(String(Date.now()), "galaxyRefreshAttemptAt");
+
+  var rt = $persistentStore.read("galaxyCenterRefreshToken") || "";
+  var ct = $persistentStore.read("galaxyCenterToken") || "";
+  var uid = $persistentStore.read("galaxyUserId") || "";
+  if (!rt || !uid) {
+    console.log("[charge] 按需刷新：无 centerRefreshToken/userId，请先网页登录");
+    cb(false, "无centerRefreshToken，请打开 h5-recharge.geely.com/galaxy-login 登录一次");
+    return;
+  }
+  var refreshPath = "/api/v1/login/refresh?refreshToken=" + encodeURIComponent(rt);
+  var h1 = galaxySign("GET", refreshPath, "", uid, ct);
+  $httpClient.get({ url: GALAXY_HOST + refreshPath, headers: h1, timeout: 8000 }, function (err, resp, data) {
+    try {
+      if (!err && resp && resp.statusCode === 200 && data) {
+        var j = JSON.parse(data);
+        if (j.code === "success" && j.data && j.data.centerTokenDto && j.data.centerTokenDto.token) {
+          var d = j.data.centerTokenDto;
+          $persistentStore.write(d.token, "galaxyCenterToken");
+          if (d.refreshToken) $persistentStore.write(d.refreshToken, "galaxyCenterRefreshToken");
+          console.log("[charge] 按需刷新 centerToken 成功");
+          var oauthPath = "/api/v1/oauth2/code?client_id=30000023&response_type=code&scope=snsapiUserinfo,snsapiMobile";
+          var h2 = galaxySign("GET", oauthPath, "", uid, d.token);
+          $httpClient.get({ url: GALAXY_HOST + oauthPath, headers: h2, timeout: 8000 }, function (err2, resp2, data2) {
+            var code = "";
+            try {
+              var o = JSON.parse(data2);
+              if (o.code === "success" && o.data && o.data.code) code = o.data.code;
+            } catch (e) {}
+            if (!code) {
+              console.log("[charge] 按需刷新 oauth2/code 失败: " + String(data2).slice(0, 240));
+              cb(false, "oauth2/code 失败");
+              return;
+            }
+            var bodyStr = JSON.stringify({ code: code, sourceTypeKey: "0010000" });
+            var h3 = signRecharge("POST", "/gep/v2/common/getTokenByCode", bodyStr, "");
+            $httpClient.post({ url: API_HOST + "/gep/v2/common/getTokenByCode", headers: h3, body: bodyStr, timeout: 8000 }, function (err3, resp3, data3) {
+              try {
+                var t = JSON.parse(data3);
+                if (t.code === "0" || t.code === 0) {
+                  var td = t.data;
+                  var nowSec = Math.floor(Date.now() / 1000);
+                  $persistentStore.write(td.authToken, "galaxyRechargeToken");
+                  $persistentStore.write(String(nowSec + (typeof td.expireAt === "number" && td.expireAt < 1000000000 ? td.expireAt : 1799)), "galaxyTokenExpiresAt");
+                  if (td.refreshToken) $persistentStore.write(td.refreshToken, "galaxyRefreshToken");
+                  console.log("[charge] 按需刷新 recharge token 成功");
+                  cb(true, "");
+                  return;
+                }
+                console.log("[charge] 按需刷新 getTokenByCode 失败: " + String(data3).slice(0, 240));
+              } catch (e3) {}
+              cb(false, "getTokenByCode 失败");
+            });
+          });
+          return;
+        }
+        console.log("[charge] 按需刷新 centerToken 失败: " + String(data).slice(0, 240));
+      } else {
+        console.log("[charge] 按需刷新请求失败 err=" + String(err) + " status=" + (resp ? resp.statusCode : "无"));
+      }
+    } catch (e) {}
+    cb(false, "login/refresh 失败");
+  });
+}
+
 // ---------------- 接口映射与请求体构建 ----------------
 function buildEquipmentExt() {
   // 设备信息页依赖 /app/equipment/v2/manage/getEquipmentExt；
@@ -629,9 +747,16 @@ function relayControl(path, control, isResponse) {
   var expiresAt = parseInt($persistentStore.read("galaxyTokenExpiresAt") || "0", 10);
   var nowSec = Math.floor(Date.now() / 1000);
   if (!token || !userId || (expiresAt && nowSec > expiresAt - 60)) {
-    console.log("[charge] 控制转发跳过（无token/过期），放行极氪原生后端: " + control.key);
-    if (NOTIFY) $notification.post("充电桩修改：控制未转发", control.key + " 银河token缺失/过期，已放行极氪原生后端", "");
-    $done({});
+    console.log("[charge] 控制转发跳过（无token/过期），尝试按需刷新: " + control.key);
+    refreshTokensOnDemand(function (ok, why) {
+      if (ok) {
+        relayControl(path, control, isResponse); // 递归重试（token 已刷新，只进一层）
+        return;
+      }
+      console.log("[charge] 控制转发跳过（刷新失败），放行极氪原生后端: " + control.key + " " + why);
+      if (NOTIFY) $notification.post("充电桩修改：控制未转发", control.key + " 银河token刷新失败（" + why + "），已放行原生后端", "");
+      $done({});
+    });
     return;
   }
   try {
@@ -716,10 +841,16 @@ function relayInResponse() {
   var expiresAt = parseInt($persistentStore.read("galaxyTokenExpiresAt") || "0", 10);
   var nowSec = Math.floor(Date.now() / 1000);
   if (!token || !userId || (expiresAt && nowSec > expiresAt - 60)) {
-    console.log("[charge] http-response 转发跳过（无token/过期），直接兜底 " + rule.key);
-    if (serveFallback(rule.key, true)) return;
-    console.log("[charge] 无数据可注入: " + path + "（请先打开银河App或等cron刷新）");
-    $done({});
+    console.log("[charge] http-response 转发跳过（无token/过期），尝试按需刷新 " + rule.key);
+    refreshTokensOnDemand(function (ok, why) {
+      if (ok) {
+        relayInResponse(); // 递归重试（token 已刷新，只进一层）
+        return;
+      }
+      console.log("[charge] 刷新失败，直接兜底 " + rule.key + " " + why);
+      if (serveFallback(rule.key, true)) return;
+      $done({});
+    });
     return;
   }
 
