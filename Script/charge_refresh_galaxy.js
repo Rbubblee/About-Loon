@@ -1,11 +1,14 @@
 // ============================================================
-// charge_refresh_galaxy.js  v1.2（cron 定时刷新，准实时）
+// charge_refresh_galaxy.js  v1.3（cron 定时刷新，准实时 + token 生命周期）
 // 每 30 秒用银河【原生密钥】签名拉取业务接口，把实时数据写入 gx_<key>，
 // 供 charge_inject_zeekr.js 直接注入（页面加载读新鲜缓存，秒开）。
 //
 // v1.2：去掉签名头里的 Host（App 抓包为 HTTP/2，本就不带 Host 头，
 //       避免 Loon 客户端对显式 Host 的额外处理）；开头加一次百度连通性自检，
 //       用于区分"Loon 网络不可用"与"仅 api-recharge 被拦"。
+// v1.3：token 生命周期——authToken 过期提醒（6h 一次）、refreshToken 到期
+//       预警（剩余 2 天起每天提醒一次）、刷新端点预留（抓到 App 原生刷新
+//       请求后填 REFRESH_ENDPOINT 即可启用自动续期）。
 // 注意：2026-08-07 实测发现 baidu 连通性自检同样失败（err=null），
 // 说明根因是 Loon 脚本网络层在当前设备/版本整体不可用（与 MITM、规则无关）。
 // 本脚本的实时刷新能力依赖 Loon 脚本网络恢复正常；在此之前由
@@ -209,6 +212,29 @@ function signRecharge(method, path, bodyStr, token) {
   return headers;
 }
 
+// ---------------- token 生命周期（v1.3）----------------
+// refreshToken 换新端点：目前未知——H5 的 tryRefreshToken 走原生桥（SWXUserSessionPlugin），
+// 抓包里也没有 HTTP 刷新调用。等抓到银河 App 原生刷新请求后，把完整路径
+// （如 "/gep/v2/common/refreshToken"）填到这里，并在 tryRefreshToken 里补实现即可自动续期。
+var REFRESH_ENDPOINT = "";
+var AUTH_WARN_COOLDOWN_MS = 6 * 3600 * 1000; // authToken 过期提醒最小间隔 6 小时
+var REFRESH_WARN_DAYS = 2;                   // refreshToken 剩余天数提醒阈值
+
+function warnOnce(key, cooldownMs, title, body) {
+  var last = parseInt($persistentStore.read(key) || "0", 10);
+  var now = Date.now();
+  if (now - last < cooldownMs) return;
+  $persistentStore.write(String(now), key);
+  $notification.post(title, body, "");
+}
+
+function tryRefreshToken(cb) {
+  // 端点确认后实现：用 galaxyRefreshToken 调 REFRESH_ENDPOINT，成功则把
+  // 新 authToken/refreshToken/过期时间写回 persistentStore 后 cb(true)。
+  if (!REFRESH_ENDPOINT) { cb(false); return; }
+  cb(false);
+}
+
 // ---------------- 接口清单（与注入脚本 MAP 保持一致） ----------------
 var ENDPOINTS = [
   { key: "getMyEquipments", path: "/gep/v2/home/charge/getMyEquipments", body: function (u, eq, p) { return { sourceTypeKey: "0010000", userId: u }; }, always: true },
@@ -227,10 +253,33 @@ try {
   var token = $persistentStore.read("galaxyRechargeToken") || "";
   var userId = $persistentStore.read("galaxyUserId") || "";
   var expiresAt = parseInt($persistentStore.read("galaxyTokenExpiresAt") || "0", 10);
+  var refreshToken = $persistentStore.read("galaxyRefreshToken") || "";
+  var refreshExpiresAt = parseInt($persistentStore.read("galaxyRefreshTokenExpiresAt") || "0", 10);
   var nowSec = Math.floor(Date.now() / 1000);
-  if (!token || !userId || (expiresAt && nowSec > expiresAt - 60)) {
-    console.log("[charge] cron 跳过：token 缺失或已过期");
-    $done({});
+  var tokenValid = !!(token && userId && (!expiresAt || nowSec <= expiresAt - 60));
+
+  // refreshToken 临近过期预警（每天一次）
+  if (tokenValid && refreshExpiresAt > nowSec && (refreshExpiresAt - nowSec) < REFRESH_WARN_DAYS * 86400) {
+    warnOnce("galaxyRefreshWarnAt", 24 * 3600 * 1000, "充电桩修改：refreshToken 即将过期",
+      "剩余 " + ((refreshExpiresAt - nowSec) / 86400).toFixed(1) + " 天，请打开银河 App 家充桩页或网页登录页重新登录");
+  }
+
+  if (!tokenValid) {
+    if (refreshToken && refreshExpiresAt > nowSec && REFRESH_ENDPOINT) {
+      tryRefreshToken(function (ok) {
+        if (!ok) {
+          warnOnce("galaxyTokenWarnAt", AUTH_WARN_COOLDOWN_MS, "充电桩修改：银河 token 已过期",
+            "自动续期失败，请打开银河 App 家充桩页，或浏览器打开 h5-recharge.geely.com/galaxy-login 重新登录（约30秒）");
+        }
+        $done({});
+      });
+    } else {
+      warnOnce("galaxyTokenWarnAt", AUTH_WARN_COOLDOWN_MS, "充电桩修改：银河 token 已过期",
+        "请打开银河 App 家充桩页，或浏览器打开 h5-recharge.geely.com/galaxy-login 重新登录（约30秒）");
+      console.log("[charge] cron 跳过：token 缺失或已过期");
+      $done({});
+      return;
+    }
     return;
   }
 

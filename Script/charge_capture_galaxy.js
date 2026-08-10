@@ -1,5 +1,8 @@
 // ============================================================
-// charge_capture_galaxy.js  v3
+// charge_capture_galaxy.js  v3.1
+//
+// v3.1（2026-08-10）：getTokenByCode 同时持久化 refreshToken 过期时间
+//（galaxyRefreshTokenExpiresAt，秒），供 cron 做到期预警/自动续期。
 // 监听银河App的 api-recharge 流量：
 //   1. getTokenByCode  → 保存 authToken / refreshToken / 过期时间
 //   2. getUserInfoByToken → 保存 userId
@@ -89,6 +92,12 @@ try {
       var expiresAt = (typeof expire === "number" && expire > 1000000000) ? expire : now + (typeof expire === "number" ? expire : 1799);
       $persistentStore.write(String(expiresAt), "galaxyTokenExpiresAt");
       if (d.refreshToken) $persistentStore.write(d.refreshToken, "galaxyRefreshToken");
+      var rExp = d.refreshExpireAt;
+      if (typeof rExp === "number" && rExp > 1000000000000) {
+        $persistentStore.write(String(Math.floor(rExp / 1000)), "galaxyRefreshTokenExpiresAt");
+      } else if (typeof rExp === "number" && rExp > 1000000000) {
+        $persistentStore.write(String(Math.floor(rExp)), "galaxyRefreshTokenExpiresAt");
+      }
     console.log("[charge] 已保存 rechargeToken，约 " + Math.round((expiresAt - now) / 60) + " 分钟有效");
     if (NOTIFY) $notification.post("充电桩修改：银河token已更新", "约 " + Math.round((expiresAt - now) / 60) + " 分钟有效", "");
   }

@@ -1,9 +1,11 @@
 // ============================================================
-// charge_galaxy_login.js  v1.1（银河账号网页登录页，替代银河App）
+// charge_galaxy_login.js  v1.2（银河账号网页登录页，替代银河App）
 //
 // v1.1（2026-08-10）：把「获取安全配置失败：{}」的提示按根因分级——
 //   无 relay: 标记 → relay 规则未生效（旧插件/未删除重加/enableGwRelay 关）；
 //   relay host=h5-recharge → Loon 缓存了旧版 relay（需 ?v= 升版强制刷新）。
+// v1.2（2026-08-10）：store-token 提交体增加 refreshExpiresAt（秒），
+//   供 charge_refresh_galaxy.js 做 refreshToken 到期预警/自动续期。
 //
 // 挂在 https://h5-recharge.geely.com/galaxy-login 下；两个网关的请求都走
 // charge_gw_relay.js 同源代理（/galaxy-gw、/recharge-gw），绕开网关对
@@ -51,7 +53,7 @@ pre{white-space:pre-wrap;word-break:break-all;font-size:11px;background:#0b1019;
 <h1>银河账号登录（替代银河App）</h1>
 <div class="meta">页面来源：<span id="origin"></span>（必须为 https://h5-recharge.geely.com）</div>
 <div class="meta" id="sessionInfo">尚未登录</div>
-<div class="meta">登录页脚本 v1.1 · 需配套 relay v3.0+（Host 修复，v7.8.2 起）</div>
+<div class="meta">登录页脚本 v1.2 · 需配套 relay v3.1+（Host/gl_user_id 修复，v7.8.5 起）</div>
 <input id="mobile" type="tel" placeholder="手机号" inputmode="numeric">
 <button id="btnGetCode">获取短信验证码（先滑块验证）</button>
 <div id="geetest-wrap"></div>
@@ -547,7 +549,7 @@ $("btnLogin").onclick = async function () {
     await fetch("https://h5-recharge.geely.com/store-token", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ authToken: d.authToken, refreshToken: d.refreshToken || "", userId: glUserId, expiresAt: Math.floor(authExp / 1000) })
+      body: JSON.stringify({ authToken: d.authToken, refreshToken: d.refreshToken || "", userId: glUserId, expiresAt: Math.floor(authExp / 1000), refreshExpiresAt: Math.floor(refreshExp / 1000) })
     });
   } catch (e) {}
   $("sessionInfo").textContent = "登录成功：user_id=" + glUserId;
