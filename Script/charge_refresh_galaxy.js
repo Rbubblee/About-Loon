@@ -1,5 +1,5 @@
 // ============================================================
-// charge_refresh_galaxy.js  v1.5（cron 定时刷新，准实时 + token 常态化）
+// charge_refresh_galaxy.js  v1.6（cron 定时刷新，准实时 + token 常态化 + 智能节流）
 // 每 30 秒用银河【原生密钥】签名拉取业务接口，把实时数据写入 gx_<key>，
 // 供 charge_inject_zeekr.js 直接注入（页面加载读新鲜缓存，秒开）。
 //
@@ -19,6 +19,10 @@
 //       authToken/refreshToken 永不过期，无需人工重登。
 //       注：jlyh 用安卓 key(204179735)+deviceSN 刷新；本脚本默认 iOS key
 //       (204925390)，若 /login/refresh 拒绝再切安卓参数（见下方注释）。
+// v1.6（2026-08-10 智能节流）：业务刷新不再无脑 30 秒心跳——极氪充电桩页面
+//       活跃（最近 5 分钟内有 /app/equipment/* 请求，由注入脚本写
+//       galaxyLastZeekrActiveAt）时每 30 秒刷新；空闲时每 10 分钟轻刷新。
+//       进入页面/点按钮的实时性由注入脚本 http-response 实时转发保证。
 // 注意：2026-08-07 实测发现 baidu 连通性自检同样失败（err=null），
 // 说明根因是 Loon 脚本网络层在当前设备/版本整体不可用（与 MITM、规则无关）。
 // 本脚本的实时刷新能力依赖 Loon 脚本网络恢复正常；在此之前由
@@ -387,6 +391,18 @@ function todayChargeTime() {
 // ---------------- 业务刷新（每次 cron 调用执行一次） ----------------
 function businessRefreshOnce() {
 try {
+  // v1.6 智能节流：极氪活跃（最近5分钟有设备请求）→ 30s；空闲 → 10 分钟轻刷新
+  var _now = Date.now();
+  var _lastActive = parseInt($persistentStore.read("galaxyLastZeekrActiveAt") || "0", 10);
+  var _activeNow = _lastActive > 0 && (_now - _lastActive) < 5 * 60 * 1000;
+  var _interval = _activeNow ? 30000 : 10 * 60 * 1000;
+  var _lastRun = parseInt($persistentStore.read("galaxyLastRefreshRunAt") || "0", 10);
+  if (_now - _lastRun < _interval) {
+    console.log("[charge] cron 跳过业务刷新（间隔 " + (_interval / 1000) + "s，活跃=" + _activeNow + "）");
+    $done({});
+    return;
+  }
+  $persistentStore.write(String(_now), "galaxyLastRefreshRunAt");
   var token = $persistentStore.read("galaxyRechargeToken") || "";
   var userId = $persistentStore.read("galaxyUserId") || "";
   var expiresAt = parseInt($persistentStore.read("galaxyTokenExpiresAt") || "0", 10);

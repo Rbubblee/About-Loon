@@ -44,6 +44,18 @@
 //   设备名/联网服务等提交时，真实写入银河（body 复制极氪字段，sourceTypeKey
 //   换 0010000 并补 userId）；失败放行原生后端并弹通知，便于抓包校准字段。
 //
+// v9.2.2 变更（2026-08-10，依据用户反馈）：
+//   1) 按钮可点击性：详情响应里 equipFuncInfoList 各项补 enable/support/
+//      status/auth 启用标记，设备级补 funcEnable/bindStatus/isNeedBlueSk/
+//      supportNewLinkEquipment 等字段，避免极氪页面因缺启用标记而禁用
+//      「设备充电/蓝牙连接/充电记录」按钮；
+//   2) 头像：优先用极氪账号头像（charge_capture_zeekr.js 从 user/info/query
+//      抓取存入 zeekrAvatarUrl），没有才用银河头像；
+//   3) 控制路径别名：/app/equipment/v2/manage/(startCharge|stopCharge) 也转发
+//      银河（部分 H5 页面可能走 manage 前缀）；
+//   4) 活跃标记：每次处理极氪设备请求写 galaxyLastZeekrActiveAt，供
+//      charge_refresh_galaxy.js 做“活跃时 30s 刷新、空闲 10 分钟轻刷新”。
+//
 // v7.0 变更（修复"点击充电桩进入绑定页"）：
 //   1. 去掉 isH5 过滤：原生 ZeekrLife（Alamofire）请求同样注入——原生家充桩
 //      首页（hh_energy://page/wallbox/homeCharge）的设备列表就是原生 getMyEquipments，
@@ -345,9 +357,14 @@ function enrichAvatar(bodyStr) {
     if (!d) return bodyStr;
     var detail = null;
     try { detail = (JSON.parse($persistentStore.read("gx_getMyEquipmentDetail") || "null") || {}).data || null; } catch (e2) {}
-    var avatar = (detail && detail.equipOwnerInfo && detail.equipOwnerInfo.avatarUrl) ||
+    // 优先用极氪账号头像（charge_capture_zeekr.js 抓取），没有才用银河头像
+    var zAvatar = $persistentStore.read("zeekrAvatarUrl") || "";
+    var zName = $persistentStore.read("zeekrNickname") || "";
+    var avatar = zAvatar ||
+                 (detail && detail.equipOwnerInfo && detail.equipOwnerInfo.avatarUrl) ||
                  (d.equipOwnerInfo && d.equipOwnerInfo.avatarUrl) || "";
-    var uname = (detail && detail.equipOwnerInfo && detail.equipOwnerInfo.userName) ||
+    var uname = zName ||
+                (detail && detail.equipOwnerInfo && detail.equipOwnerInfo.userName) ||
                 (d.equipOwnerInfo && d.equipOwnerInfo.userName) || "";
     function fillOwner(o) {
       if (!o || typeof o !== "object") return;
@@ -374,6 +391,34 @@ function enrichAvatar(bodyStr) {
     }
     if (d.equipOwnerInfo) fillOwner(d.equipOwnerInfo);
     fillOwner(d);
+    // 按钮启用标记（v9.2.2）：极氪页面可能读 enable/support/status 决定按钮是否可点
+    if (Array.isArray(d.equipFuncInfoList)) {
+      for (var j = 0; j < d.equipFuncInfoList.length; j++) {
+        var fn = d.equipFuncInfoList[j];
+        if (!fn || typeof fn !== "object") continue;
+        if (fn.enable === undefined) fn.enable = 1;
+        if (fn.support === undefined) fn.support = 1;
+        if (fn.status === undefined) fn.status = 1;
+        if (fn.auth === undefined) fn.auth = 1;
+        if (fn.isAuth === undefined) fn.isAuth = 1;
+      }
+    }
+    // 设备级状态/绑定开关，避免页面禁用全部功能
+    if (d.funcEnable === undefined) d.funcEnable = 1;
+    if (d.bindStatus === undefined) d.bindStatus = 1;
+    if (d.isBound === undefined) d.isBound = 1;
+    if (d.isNeedBlueSk === undefined) d.isNeedBlueSk = 0;
+    if (d.supportNewLinkEquipment === undefined) d.supportNewLinkEquipment = 0;
+    if (d.isAuth === undefined) d.isAuth = 1;
+    if (d.isOwner === undefined) d.isOwner = 1;
+    // 状态兼容字段：地图/首页按钮通常读 equipStatusInfo.status（101=空闲）
+    if (d.equipStatusInfo && d.equipStatusInfo.statusText === undefined) {
+      d.equipStatusInfo.statusText = d.equipStatusInfo.desc || "";
+    }
+    if (d.equipStatusInfo && d.equipStatusInfo.chargeState === undefined) {
+      var st = d.equipStatusInfo.status;
+      d.equipStatusInfo.chargeState = (st === 101) ? 0 : (st ? 1 : 0);
+    }
     return JSON.stringify(obj);
   } catch (e) {
     return bodyStr;
@@ -412,6 +457,8 @@ MAP["/app/equipment/v2/manage/getEquipmentConfigCenter"] = {
 var CONTROL_MAP = {
   "/app/equipment/v2/charge/startCharge": { key: "startCharge", target: "/gep/v1/home/charge/startCharge" },
   "/app/equipment/v2/charge/stopCharge": { key: "stopCharge", target: "/gep/v1/home/charge/stopCharge" },
+  "/app/equipment/v2/manage/startCharge": { key: "startCharge", target: "/gep/v1/home/charge/startCharge" },
+  "/app/equipment/v2/manage/stopCharge": { key: "stopCharge", target: "/gep/v1/home/charge/stopCharge" },
   "/app/equipment/v2/manage/setEquipmentConfigCenter": { key: "setEquipmentConfigCenter", target: "/gep/v2/home/charge/updateMyEquipmentInfo" }
 };
 
@@ -487,6 +534,10 @@ function relayLive() {
   if (method !== "POST") { $done({}); return; } // OPTIONS 预检等放行
   var url = $request.url || "";
   var path = url.replace(/^https?:\/\/[^/]+/, "").split("?")[0];
+  // 活跃标记：极氪在充电桩页面活动时，cron 才保持 30s 刷新（v9.2.2）
+  if (path.indexOf("/app/equipment/") === 0) {
+    try { $persistentStore.write(String(Date.now()), "galaxyLastZeekrActiveAt"); } catch (e4) {}
+  }
   var control = CONTROL_MAP[path];
   if (control) {
     relayControl(path, control);
@@ -633,6 +684,10 @@ function relayInResponse() {
   }
   var url = $request.url || "";
   var path = url.replace(/^https?:\/\/[^/]+/, "").split("?")[0];
+  // 活跃标记：极氪在充电桩页面活动时，cron 才保持 30s 刷新（v9.2.2）
+  if (path.indexOf("/app/equipment/") === 0) {
+    try { $persistentStore.write(String(Date.now()), "galaxyLastZeekrActiveAt"); } catch (e4) {}
+  }
   var control = CONTROL_MAP[path];
   if (control) {
     relayControl(path, control, true);
