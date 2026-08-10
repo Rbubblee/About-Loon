@@ -1,5 +1,5 @@
 // ============================================================
-// charge_inject_zeekr.js  v7.3（纯响应注入，零网络）
+// charge_inject_zeekr.js  v8.0（纯响应注入，零网络）
 // 极氪家充桩的设备类接口（sea-home-prod /app/equipment/*）无论原生还是
 // WebView 发出，统一把响应替换为银河数据（缓存 gx_<key> / 内置种子 / 合成）。
 //
@@ -19,21 +19,13 @@
 //       charge_refresh_galaxy.js 每 30s 用原生签名刷新 gx_<key>。
 // 降级：无缓存时回退内置种子数据；无映射接口弹通知（把路径发回补映射）。
 //
-// v7.3（实验模式，enableMinimal）：只注入"桩基本参数"——设备列表 getMyEquipments
-// （桩编码/providerNo/isOwner 等）与绑定判断 checkBindMyEquipment（isNeedBlueSk=0），
-// 其余设备类接口（详情/卡片/记录/扩展信息…）一律放行给极氪真实后端，验证浩瀚
-// 底层数据跨品牌是否原生可用（startCharge 实测真实后端能建单成功）。
-//
-// v7.8.7（2026-08-10）：实验模式放行时弹通知提醒。8.10 实测（6700）列表被注入
-// 但 getMyEquipmentDetail 被实验模式放行 → 极氪后端 403「没有操作权限」→
-// 详情/状态空白。此通知让"开了实验模式导致详情不可用"一眼可辨。
+// v8.0（2026-08-10 重构）：移除实验模式（enableMinimal）——实验模式只注入
+// 列表+绑定判断、其余放行真实后端，导致 8.10 实测详情 403 页面空白。
+// 重构后无条件注入全部已映射接口（详情/卡片/记录/扩展信息…），
+// 与插件开关精简（10→5）配套。
 // ============================================================
 
 var NOTIFY = String(($argument || [])[0]) !== "false";
-var MINIMAL = String(($argument || [])[1]) !== "false";
-
-// 实验模式允许注入的接口（桩基本参数）
-var MINIMAL_KEYS = { "getMyEquipments": 1, "checkBindMyEquipment": 1 };
 
 var RECHARGE_KEY = "204195485";
 var RECHARGE_SECRET = "CqPwP83wzdjesmLeDuzK6SljsYN5PvRM";
@@ -293,14 +285,6 @@ try {
   if (!rule) {
     console.log("[charge] 未映射极氪接口: " + path);
     if (NOTIFY) $notification.post("充电桩修改：未映射接口", path + "（把这条发给我，我来加映射）", "");
-    $done({});
-    return;
-  }
-
-  // 实验模式：只注入桩基本参数，其余放行给极氪真实后端
-  if (MINIMAL && !MINIMAL_KEYS[rule.key]) {
-    console.log("[charge] 实验模式放行（仅注入基本参数）: " + path);
-    if (NOTIFY) $notification.post("充电桩修改：实验模式放行", rule.key + " 已放行给极氪真实后端（会 403/空数据）——如需显示详情/状态，请关闭插件的「实验模式」开关", "");
     $done({});
     return;
   }
