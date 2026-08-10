@@ -1,7 +1,7 @@
 // ============================================================
-// charge_inject_zeekr.js  v8.0（纯响应注入，零网络）
+// charge_inject_zeekr.js  v8.1（实时响应注入）
 // 极氪家充桩的设备类接口（sea-home-prod /app/equipment/*）无论原生还是
-// WebView 发出，统一把响应替换为银河数据（缓存 gx_<key> / 内置种子 / 合成）。
+// WebView 发出，统一把响应替换为银河数据（实时拉取 / 缓存 gx_<key> / 种子 / 合成）。
 //
 // v7.0 变更（修复"点击充电桩进入绑定页"）：
 //   1. 去掉 isH5 过滤：原生 ZeekrLife（Alamofire）请求同样注入——原生家充桩
@@ -23,6 +23,12 @@
 // 列表+绑定判断、其余放行真实后端，导致 8.10 实测详情 403 页面空白。
 // 重构后无条件注入全部已映射接口（详情/卡片/记录/扩展信息…），
 // 与插件开关精简（10→5）配套。
+//
+// v8.1（2026-08-10 实时）：进入极氪家充桩页面时，每个被映射的接口请求都
+// 现场用银河 token 实时拉取 api-recharge 对应接口再注入（数据即开即新，
+// 不再等 30 秒 cron）；实时失败/无 token 时回退缓存 gx_<key>，再回退种子。
+// 注：startCharge/stopCharge 等控制接口不做绑定校验，原生框架可用，
+// 读接口的"账号-设备绑定"校验在服务端 DB，只能靠本注入绕过（见文档 C.12）。
 // ============================================================
 
 var NOTIFY = String(($argument || [])[0]) !== "false";
@@ -337,8 +343,48 @@ try {
     $done({});
   }
 
-  // v5.1：响应脚本零网络，直接读缓存/种子注入
-  fallback();
+  // v8.1：实时优先——每个请求现场拉银河接口注入；失败回退缓存/种子
+  var token = $persistentStore.read("galaxyRechargeToken") || "";
+  var userId = $persistentStore.read("galaxyUserId") || "";
+  var expiresAt = parseInt($persistentStore.read("galaxyTokenExpiresAt") || "0", 10);
+  var nowSec = Math.floor(Date.now() / 1000);
+  var eq = $persistentStore.read("galaxyLastEquipmentId") || "";
+  var provider = $persistentStore.read("galaxyLastProviderNo") || "DIRECT_WDZ";
+  var canLive = !!(token && userId && (!expiresAt || nowSec <= expiresAt - 60));
+
+  if (!canLive) {
+    fallback();
+  } else {
+    var bodyStr = JSON.stringify(rule.body(userId, eq, provider));
+    var headers = signRecharge("POST", rule.target, bodyStr, token);
+    $httpClient.post({
+      url: API_HOST + rule.target,
+      headers: headers,
+      body: bodyStr,
+      timeout: 5000
+    }, function (err, resp, data) {
+      try {
+        if (!err && resp && resp.statusCode === 200 && data) {
+          var j = JSON.parse(data);
+          if (j.code === "0" || j.code === 0 || j.code === "success") {
+            $persistentStore.write(data, "gx_" + rule.key);
+            $persistentStore.write(String(Date.now()), "galaxyLastUpdatedAt");
+            if (rule.key === "getMyEquipments") {
+              var list = (j.data && j.data.resultList) || [];
+              if (list.length > 0) {
+                $persistentStore.write(String(list[0].equipmentId || ""), "galaxyLastEquipmentId");
+                $persistentStore.write(String(list[0].providerNo || provider), "galaxyLastProviderNo");
+              }
+            }
+            finish(data, "实时");
+            return;
+          }
+        }
+      } catch (e) {}
+      console.log("[charge] 实时拉取失败，回退缓存/种子: " + rule.key + " err=" + String(err));
+      fallback();
+    });
+  }
 } catch (e) {
   console.log("[charge] 错误: " + (e && e.message ? e.message : String(e)));
   $notification.post("充电桩修改 脚本错误", e && e.message ? e.message : String(e), "");
