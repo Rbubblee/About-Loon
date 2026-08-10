@@ -56,6 +56,16 @@
 //   4) 活跃标记：每次处理极氪设备请求写 galaxyLastZeekrActiveAt，供
 //      charge_refresh_galaxy.js 做“活跃时 30s 刷新、空闲 10 分钟轻刷新”。
 //
+// v9.2.4 变更（2026-08-10，依据用户 Loon 日志）：
+//   1) 控制请求体兜底：极氪原生 setEquipmentConfigCenter 等请求体可能为空
+//      （6705 抓包里 getMyEquipments 也有空 body），equipmentId/providerNo
+//      缺省时从 persistentStore（galaxyLastEquipmentId/galaxyLastProviderNo）
+//      补齐，避免转发 body 只有 sourceTypeKey+userId 被网关拒绝；
+//   2) 转发失败诊断：日志带 resp status + MITM 提示——若 $httpClient 到
+//      api-recharge 持续 err=null，说明被 Loon 拦截（脚本发往 MITM 域名），
+//      需把 api-recharge.geely.com 从插件 [MitM] 列表移除（v10.4 已移除，
+//      改为直连，web 登录/cron 不受影响）。
+//
 // v7.0 变更（修复"点击充电桩进入绑定页"）：
 //   1. 去掉 isH5 过滤：原生 ZeekrLife（Alamofire）请求同样注入——原生家充桩
 //      首页（hh_energy://page/wallbox/homeCharge）的设备列表就是原生 getMyEquipments，
@@ -593,6 +603,9 @@ function buildControlBody(incomingBodyStr, userId) {
   } catch (e) {}
   out.sourceTypeKey = "0010000";
   out.userId = userId;
+  // 极氪原生请求体可能为空：equipmentId/providerNo 从存储补齐（v9.2.4）
+  if (!out.equipmentId) out.equipmentId = $persistentStore.read("galaxyLastEquipmentId") || "";
+  if (!out.providerNo) out.providerNo = $persistentStore.read("galaxyLastProviderNo") || "DIRECT_WDZ";
   return out;
 }
 
@@ -786,8 +799,8 @@ function relayControl(path, control, isResponse) {
           return;
         }
       } catch (e3) {}
-      console.log("[charge] 控制转发请求失败，放行极氪原生后端: " + control.key + " err=" + String(err));
-      if (NOTIFY) $notification.post("充电桩修改：控制转发失败", control.key + " 已放行极氪原生后端", "");
+      console.log("[charge] 控制转发请求失败，放行极氪原生后端: " + control.key + " err=" + String(err) + " status=" + (resp ? resp.statusCode : "无") + "（若持续err=null：确认插件MITM已移除api-recharge.geely.com）");
+      if (NOTIFY) $notification.post("充电桩修改：控制转发失败", control.key + " 已放行原生后端（err=" + String(err) + "），见Loon日志", "");
       $done({});
     });
   } catch (e) {
