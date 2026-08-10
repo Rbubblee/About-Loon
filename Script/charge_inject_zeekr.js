@@ -1,11 +1,27 @@
 // ============================================================
-// charge_inject_zeekr.js  v9.0（实时转发 + 兜底注入，上下文自适应）
+// charge_inject_zeekr.js  v9.1（实时转发 + 控制转发 + 兜底注入，上下文自适应）
 // 极氪家充桩的设备类接口（sea-home-prod /app/equipment/*）无论原生还是
 // WebView 发出：
 //   - http-request 上下文（主通道）：直接转发到银河 api-recharge，返回实时数据
 //     （响应头 x-zeekr-live: 1），不再读历史缓存；
+//   - 控制类（startCharge/stopCharge）：同样在 http-request 转发到银河真实控制接口，
+//     让极氪页面的「开始/停止充电」按钮真正操作银河桩（6704 抓包确认契约：
+//     POST /gep/v1/home/charge/startCharge，body 含 equipmentId/sourceTypeKey=0010000/
+//     userId/providerNo，响应与极氪侧结构一致）；转发失败才放行极氪原生后端；
 //   - http-response 上下文（兜底）：仅当实时转发失败/未映射/合成接口时，
 //     用缓存 gx_<key> / 种子 / 合成响应填充，保证极氪App不因无数据报错。
+//
+// v9.1 变更（2026-08-10，依据 6704/6705 操作抓包）：
+//   1) 新增控制转发：/app/equipment/v2/charge/startCharge → /gep/v1/home/charge/startCharge，
+//      /app/equipment/v2/charge/stopCharge → /gep/v1/home/charge/stopCharge；
+//      请求体把 sourceTypeKey 换成银河 0010000 并补 userId（来自登录存储），
+//      其余字段（orderId 等）原样保留。控制响应直接返回（x-zeekr-live: 1），
+//      失败时放行极氪原生后端（至少能建极氪侧订单，不报错）。
+//   2) 读接口实时转发失败/无 token 时，http-request 阶段直接回退缓存/种子
+//      （不再依赖 http-response 是否触发），响应头带 x-inject-source；
+//   3) 修复 getEquipmentChargeOrders 缺 chargeTime 导致网关 500
+//      （6704 实测：H5 请求带 chargeTime:"2026.08.10" 返回 200，cron 不带则 500）；
+//   4) 缓存年龄按接口分别记录（gx_<key>_at），不再被单个失败接口拖累。
 //
 // v7.0 变更（修复"点击充电桩进入绑定页"）：
 //   1. 去掉 isH5 过滤：原生 ZeekrLife（Alamofire）请求同样注入——原生家充桩
@@ -273,12 +289,53 @@ var MAP = {
   "/app/equipment/v2/manage/getEquipmentBindVins": { key: "getEquipmentBindVins", target: "/gep/v2/home/charge/getEquipmentBindVins", body: function (u, eq, p) { return { sourceTypeKey: "0010000", userId: u, equipmentId: eq, providerNo: p }; } },
   "/app/equipment/v2/manage/getEquipmentChargeOrders": { key: "getEquipmentChargeOrders", target: "/gep/v2/home/charge/getEquipmentChargeOrders", body: function (u, eq, p) { return { sourceTypeKey: "0010000", userId: u, equipmentId: eq, providerNo: p, calcType: 1, pageNum: 1, pageSize: 10 }; } },
   "/app/equipment/v2/manage/getEquipmentChargeOrderCalc": { key: "getEquipmentChargeOrderCalc", target: "/gep/v2/home/charge/getEquipmentChargeOrderCalc", body: function (u, eq, p) { return { sourceTypeKey: "0010000", userId: u, equipmentId: eq, providerNo: p, calcType: 1 }; } },
+  "/app/equipment/v2/manage/equipmentCheck": { key: "equipmentCheck", target: "/gep/v1/home/charge/equipmentCheck", body: function (u, eq, p) { return { sourceTypeKey: "0010000", userId: u, equipmentId: eq, providerNo: p }; } },
+  "/app/equipment/v2/charge/equipmentCheck": { key: "equipmentCheck", target: "/gep/v1/home/charge/equipmentCheck", body: function (u, eq, p) { return { sourceTypeKey: "0010000", userId: u, equipmentId: eq, providerNo: p }; } },
   "/app/sim/v1/netflow/generateRenewUrl": { key: "generateRenewUrl", target: "/sim/v1/netflow/generateRenewUrl", body: function (u, eq, p) { return { sourceTypeKey: "0010000", userId: u, deviceSn: eq, providerNo: p }; } },
   // 合成接口：浩瀚服务端不认银河桩，直接返回"已绑定/无需绑桩"，避免进入绑定页
   "/app/equipment/v2/manage/checkBindMyEquipment": { key: "checkBindMyEquipment", target: "synthetic", synthetic: true, synth: function () { return '{"code":"0","message":"SUCCESS","data":{"isNeedBlueSk":0}}'; } },
   // 合成接口：设备信息页（/equipment-info/center）
   "/app/equipment/v2/manage/getEquipmentExt": { key: "getEquipmentExt", target: "synthetic", synthetic: true, synth: buildEquipmentExt }
 };
+
+// ---------------- 控制接口映射（v9.1：极氪页面真正操作银河桩） ----------------
+// 契约来自 6704（银河 App 原生）：POST /gep/v1/home/charge/startCharge
+//   body {"equipmentId":"00000000000","sourceTypeKey":"0010000","userId":"9000000000000000000","providerNo":"DIRECT_WDZ"}
+//   resp {"code":"0","message":"SUCCESS","data":{"equipmentId":..,"providerNo":"DIRECT_WDZ","orderId":"..","status":0,"failCode":null,"failReason":null}}
+// stopCharge 端点未见抓包（桩空闲未启动），按同构约定 /gep/v1/home/charge/stopCharge，
+// 请求体同 startCharge（可带 orderId）；首次使用后请核对银河 App 日志/抓包校准。
+var CONTROL_MAP = {
+  "/app/equipment/v2/charge/startCharge": { key: "startCharge", target: "/gep/v1/home/charge/startCharge" },
+  "/app/equipment/v2/charge/stopCharge": { key: "stopCharge", target: "/gep/v1/home/charge/stopCharge" }
+};
+
+function buildControlBody(incomingBodyStr, userId) {
+  // 极氪请求体 {"equipmentId":..,"sourceTypeKey":"0100000","providerNo":"DIRECT_WDZ"}
+  // → 银河 {"equipmentId":..,"sourceTypeKey":"0010000","userId":..,"providerNo":"DIRECT_WDZ",[orderId]}
+  var out = {};
+  try {
+    var src = JSON.parse(incomingBodyStr || "{}");
+    for (var k in src) {
+      if (k === "sourceTypeKey") continue;
+      out[k] = src[k];
+    }
+  } catch (e) {}
+  out.sourceTypeKey = "0010000";
+  out.userId = userId;
+  return out;
+}
+
+function todayChargeTime() {
+  var d = new Date(Date.now() + 8 * 3600 * 1000);
+  function p(n) { return (n < 10 ? "0" : "") + n; }
+  return d.getUTCFullYear() + "." + p(d.getUTCMonth() + 1) + "." + p(d.getUTCDate());
+}
+
+function cacheAge(key) {
+  var at = parseInt($persistentStore.read("gx_" + key + "_at") || $persistentStore.read("galaxyLastUpdatedAt") || "0", 10);
+  if (!at) return -1;
+  return Math.max(0, Math.round((Date.now() - at) / 1000));
+}
 
 // 种子：2026-08-07 真实抓包（银河 App）
 var SEED = {
@@ -302,17 +359,59 @@ function relayLive() {
   if (method !== "POST") { $done({}); return; } // OPTIONS 预检等放行
   var url = $request.url || "";
   var path = url.replace(/^https?:\/\/[^/]+/, "").split("?")[0];
+  var control = CONTROL_MAP[path];
+  if (control) {
+    relayControl(path, control);
+    return;
+  }
   var rule = MAP[path];
-  if (!rule || rule.synthetic) { $done({}); return; } // 未映射/合成/控制类放行
+  if (!rule) { $done({}); return; } // 未映射放行
+  if (rule.synthetic) {
+    // 合成接口在 http-request 直接返回，不再让请求打到真实后端
+    var synthBody = rule.synth();
+    if (synthBody) {
+      console.log("[charge] 合成注入 " + path + " -> " + rule.key);
+      $done({ response: { status: 200, headers: { "content-type": "application/json", "x-inject-source": "合成" }, body: synthBody } });
+      return;
+    }
+    $done({});
+    return;
+  }
   var token = $persistentStore.read("galaxyRechargeToken") || "";
   var userId = $persistentStore.read("galaxyUserId") || "";
   var expiresAt = parseInt($persistentStore.read("galaxyTokenExpiresAt") || "0", 10);
   var nowSec = Math.floor(Date.now() / 1000);
-  if (!token || !userId || (expiresAt && nowSec > expiresAt - 60)) { $done({}); return; }
+  if (!token || !userId || (expiresAt && nowSec > expiresAt - 60)) {
+    // 无有效 token：http-request 直接回退缓存/种子，保证页面有数据
+    console.log("[charge] 实时转发跳过（无token/过期），http-request 直接回退 " + rule.key);
+    var cached0 = $persistentStore.read("gx_" + rule.key);
+    if (cached0) {
+      $done({ response: { status: 200, headers: { "content-type": "application/json", "x-inject-source": "缓存 " + cacheAge(rule.key) + "s" }, body: cached0 } });
+      return;
+    }
+    if (SEED[rule.key]) {
+      $done({ response: { status: 200, headers: { "content-type": "application/json", "x-inject-source": "种子" }, body: SEED[rule.key] } });
+      return;
+    }
+    $done({});
+    return;
+  }
   var eq = $persistentStore.read("galaxyLastEquipmentId") || "";
   var provider = $persistentStore.read("galaxyLastProviderNo") || "DIRECT_WDZ";
   try {
-    var bodyStr = JSON.stringify(rule.body(userId, eq, provider));
+    var bodyObj = rule.body(userId, eq, provider);
+    // 充电记录分页/时间参数优先取极氪请求体（6704：chargeTime 必填，缺了网关 500）
+    if (rule.key === "getEquipmentChargeOrders") {
+      try {
+        var zBody = JSON.parse($request.body || "{}");
+        if (zBody.pageNum) bodyObj.pageNum = zBody.pageNum;
+        if (zBody.pageSize) bodyObj.pageSize = zBody.pageSize;
+        if (zBody.chargeTime) bodyObj.chargeTime = zBody.chargeTime;
+        if (zBody.calcType !== undefined) bodyObj.calcType = zBody.calcType;
+      } catch (e2) {}
+      if (!bodyObj.chargeTime) bodyObj.chargeTime = todayChargeTime();
+    }
+    var bodyStr = JSON.stringify(bodyObj);
     var headers = signRecharge("POST", rule.target, bodyStr, token);
     $httpClient.post({
       url: API_HOST + rule.target,
@@ -325,6 +424,7 @@ function relayLive() {
           var j = JSON.parse(data);
           if (j.code === "0" || j.code === 0 || j.code === "success") {
             $persistentStore.write(data, "gx_" + rule.key);
+            $persistentStore.write(String(Date.now()), "gx_" + rule.key + "_at");
             $persistentStore.write(String(Date.now()), "galaxyLastUpdatedAt");
             if (rule.key === "getMyEquipments") {
               var list = (j.data && j.data.resultList) || [];
@@ -340,11 +440,77 @@ function relayLive() {
           }
         }
       } catch (e) {}
-      console.log("[charge] 实时转发失败，放行兜底: " + rule.key + " err=" + String(err));
+      console.log("[charge] 实时转发失败，http-request 直接回退缓存/种子: " + rule.key + " err=" + String(err));
+      var cached = $persistentStore.read("gx_" + rule.key);
+      if (cached) {
+        $done({ response: { status: 200, headers: { "content-type": "application/json", "x-inject-source": "缓存 " + cacheAge(rule.key) + "s" }, body: cached } });
+        return;
+      }
+      if (SEED[rule.key]) {
+        $done({ response: { status: 200, headers: { "content-type": "application/json", "x-inject-source": "种子" }, body: SEED[rule.key] } });
+        return;
+      }
       $done({});
     });
   } catch (e) {
-    console.log("[charge] 实时转发异常，放行兜底: " + rule.key);
+    console.log("[charge] 实时转发异常，http-request 直接回退: " + rule.key);
+    var cachedE = $persistentStore.read("gx_" + rule.key);
+    if (cachedE) {
+      $done({ response: { status: 200, headers: { "content-type": "application/json", "x-inject-source": "缓存 " + cacheAge(rule.key) + "s" }, body: cachedE } });
+      return;
+    }
+    if (SEED[rule.key]) {
+      $done({ response: { status: 200, headers: { "content-type": "application/json", "x-inject-source": "种子" }, body: SEED[rule.key] } });
+      return;
+    }
+    $done({});
+  }
+}
+
+// ---------------- 控制接口转发：极氪按钮 → 银河真实操作 ----------------
+function relayControl(path, control) {
+  var token = $persistentStore.read("galaxyRechargeToken") || "";
+  var userId = $persistentStore.read("galaxyUserId") || "";
+  var expiresAt = parseInt($persistentStore.read("galaxyTokenExpiresAt") || "0", 10);
+  var nowSec = Math.floor(Date.now() / 1000);
+  if (!token || !userId || (expiresAt && nowSec > expiresAt - 60)) {
+    console.log("[charge] 控制转发跳过（无token/过期），放行极氪原生后端: " + control.key);
+    if (NOTIFY) $notification.post("充电桩修改：控制未转发", control.key + " 银河token缺失/过期，已放行极氪原生后端", "");
+    $done({});
+    return;
+  }
+  try {
+    var bodyObj = buildControlBody($request.body, userId);
+    var bodyStr = JSON.stringify(bodyObj);
+    var headers = signRecharge("POST", control.target, bodyStr, token);
+    console.log("[charge] 控制转发 " + path + " -> " + control.target + " body=" + bodyStr);
+    $httpClient.post({
+      url: API_HOST + control.target,
+      headers: headers,
+      body: bodyStr,
+      timeout: 8000
+    }, function (err, resp, data) {
+      try {
+        if (!err && resp && resp.statusCode === 200 && data) {
+          var j = JSON.parse(data);
+          if (j.code === "0" || j.code === 0 || j.code === "success") {
+            $done({ response: { status: 200, headers: { "content-type": "application/json", "x-zeekr-live": "1" }, body: data } });
+            if (NOTIFY) $notification.post("充电桩修改：操作已下发", control.key + " 成功（银河 orderId=" + ((j.data && j.data.orderId) || "?") + "）", "");
+            return;
+          }
+          // 银河返回业务错误（如桩离线/未插枪）：把真实结果回给极氪页面显示
+          console.log("[charge] 控制转发业务失败: " + control.key + " " + String(data).slice(0, 200));
+          $done({ response: { status: 200, headers: { "content-type": "application/json", "x-zeekr-live": "1" }, body: data } });
+          if (NOTIFY) $notification.post("充电桩修改：操作失败", control.key + " " + String((j && j.message) || ""), "");
+          return;
+        }
+      } catch (e3) {}
+      console.log("[charge] 控制转发请求失败，放行极氪原生后端: " + control.key + " err=" + String(err));
+      if (NOTIFY) $notification.post("充电桩修改：控制转发失败", control.key + " 已放行极氪原生后端", "");
+      $done({});
+    });
+  } catch (e) {
+    console.log("[charge] 控制转发异常，放行极氪原生后端: " + control.key);
     $done({});
   }
 }
@@ -416,8 +582,7 @@ try {
   function fallback() {
     var cached = $persistentStore.read("gx_" + rule.key);
     if (cached) {
-      var updatedAt = parseInt($persistentStore.read("galaxyLastUpdatedAt") || "0", 10);
-      var ageSec = updatedAt > 0 ? Math.max(0, Math.round((Date.now() - updatedAt) / 1000)) : -1;
+      var ageSec = cacheAge(rule.key);
       finish(cached, ageSec >= 0 ? "缓存 " + ageSec + "s" : "缓存(时间未知)");
       return;
     }

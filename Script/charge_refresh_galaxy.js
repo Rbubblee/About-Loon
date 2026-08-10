@@ -1,5 +1,5 @@
 // ============================================================
-// charge_refresh_galaxy.js  v1.3（cron 定时刷新，准实时 + token 生命周期）
+// charge_refresh_galaxy.js  v1.4（cron 定时刷新，准实时 + token 生命周期）
 // 每 30 秒用银河【原生密钥】签名拉取业务接口，把实时数据写入 gx_<key>，
 // 供 charge_inject_zeekr.js 直接注入（页面加载读新鲜缓存，秒开）。
 //
@@ -9,6 +9,9 @@
 // v1.3：token 生命周期——authToken 过期提醒（6h 一次）、refreshToken 到期
 //       预警（剩余 2 天起每天提醒一次）、刷新端点预留（抓到 App 原生刷新
 //       请求后填 REFRESH_ENDPOINT 即可启用自动续期）。
+// v1.4：getEquipmentChargeOrders 补 chargeTime（YYYY.MM.DD）——6704 抓包实测
+//       缺该字段网关返回 500（H5 请求带 chargeTime 才 200）；每个接口成功
+//       时单独记录 gx_<key>_at 时间戳，避免单个接口失败拖累整体缓存年龄。
 // 注意：2026-08-07 实测发现 baidu 连通性自检同样失败（err=null），
 // 说明根因是 Loon 脚本网络层在当前设备/版本整体不可用（与 MITM、规则无关）。
 // 本脚本的实时刷新能力依赖 Loon 脚本网络恢复正常；在此之前由
@@ -243,10 +246,16 @@ var ENDPOINTS = [
   { key: "getMyEquipmentShares", path: "/gep/v1/home/charge/getMyEquipmentShares", body: function (u, eq, p) { return { sourceTypeKey: "0010000", userId: u, equipmentId: eq, providerNo: p }; }, always: false },
   { key: "getEquipmentVersions", path: "/gep/v1/home/charge/getEquipmentVersions", body: function (u, eq, p) { return { sourceTypeKey: "0010000", userId: u, equipmentId: eq, providerNo: p }; }, always: false },
   { key: "getEquipmentBindVins", path: "/gep/v2/home/charge/getEquipmentBindVins", body: function (u, eq, p) { return { sourceTypeKey: "0010000", userId: u, equipmentId: eq, providerNo: p }; }, always: false },
-  { key: "getEquipmentChargeOrders", path: "/gep/v2/home/charge/getEquipmentChargeOrders", body: function (u, eq, p) { return { sourceTypeKey: "0010000", userId: u, equipmentId: eq, providerNo: p, calcType: 1, pageNum: 1, pageSize: 10 }; }, always: false },
+  { key: "getEquipmentChargeOrders", path: "/gep/v2/home/charge/getEquipmentChargeOrders", body: function (u, eq, p) { return { sourceTypeKey: "0010000", userId: u, equipmentId: eq, providerNo: p, calcType: 1, pageNum: 1, pageSize: 10, chargeTime: todayChargeTime() }; }, always: false },
   { key: "getEquipmentChargeOrderCalc", path: "/gep/v2/home/charge/getEquipmentChargeOrderCalc", body: function (u, eq, p) { return { sourceTypeKey: "0010000", userId: u, equipmentId: eq, providerNo: p, calcType: 1 }; }, always: false },
   { key: "generateRenewUrl", path: "/sim/v1/netflow/generateRenewUrl", body: function (u, eq, p) { return { sourceTypeKey: "0010000", userId: u, deviceSn: eq, providerNo: p }; }, always: false }
 ];
+
+function todayChargeTime() {
+  var d = new Date(Date.now() + 8 * 3600 * 1000);
+  function p(n) { return (n < 10 ? "0" : "") + n; }
+  return d.getUTCFullYear() + "." + p(d.getUTCMonth() + 1) + "." + p(d.getUTCDate());
+}
 
 // ---------------- 主流程 ----------------
 try {
@@ -349,6 +358,7 @@ try {
             var j = JSON.parse(data);
             if (j.code === "0" || j.code === 0 || j.code === "success") {
               $persistentStore.write(data, "gx_" + ep.key);
+              $persistentStore.write(String(Date.now()), "gx_" + ep.key + "_at");
               successAny = true;
               if (ep.key === "getMyEquipments") {
                 var list = (j.data && j.data.resultList) || [];
