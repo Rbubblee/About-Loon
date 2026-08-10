@@ -1,5 +1,10 @@
 // ============================================================
-// charge_gw_relay.js  v3.0（银河网关转发代理，不依赖 URL 改写）
+// charge_gw_relay.js  v3.1（银河网关转发代理，不依赖 URL 改写）
+//
+// v3.1（2026-08-10）：登录前安全配置报
+//   "Header gl_user_id in X-Ca-Signature-Headers is Required"——
+//   Safari fetch 会剥离空值自定义头，登录前 gl_user_id 签的是空值，
+//   转发时头已丢失；这里按签名补回空头（非空值正常透传）。
 //
 // 为什么不用 [URL Rewrite] / $done({url})：
 //   实测在你的 Loon 3.5.0(975) 上，插件里的 URL Rewrite 和 http-request
@@ -89,6 +94,12 @@ function buildOutHeaders(requestHeaders, target) {
   }
   if (hostKey) { headers[hostKey] = targetHost; }
   else { headers["Host"] = targetHost; }
+  // 浏览器会剥离空值自定义头：登录前 gl_user_id 在签名列表里但值为空，
+  // fetch 发不出该头 → 网关报 "Header gl_user_id in X-Ca-Signature-Headers
+  // is Required"。页面签名用的就是空值，这里按签名补回空头。
+  if (target.indexOf("galaxy-user-api") >= 0 && !getHeader(headers, "gl_user_id")) {
+    setHeader(headers, "gl_user_id", "");
+  }
   // Origin/Referer 是浏览器加的，转发时去掉更稳妥
   delHeader(headers, "Origin");
   delHeader(headers, "Referer");
@@ -118,7 +129,7 @@ function proxyToGateway(callback) {
         setHeader(outH, "content-type", getHeader(outH, "content-type") || "application/json; charset=utf-8");
         setHeader(outH, RELAY_MARKER, "1");
         var debug = "url=" + url + "|target=" + t.target + "|ctx=" + (isResponse ? "resp" : "req") +
-          "|status=" + resp.statusCode + "|caErr=" + getHeader(rh, "x-ca-error-message") +
+          "|status=" + (resp.statusCode || resp.status || "") + "|caErr=" + getHeader(rh, "x-ca-error-message") +
           "|host=" + getHeader(headers, "Host") + "|date=" + getHeader(headers, "Date") +
           "|galDate=" + (signedDate ? "yes" : "no");
         setHeader(outH, "x-relay-debug", debug);
