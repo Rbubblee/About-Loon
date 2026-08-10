@@ -1,8 +1,10 @@
 // ============================================================
-// charge_store_token.js  v1.1（网页登录后把 token 写入 Loon）
+// charge_store_token.js  v1.2（网页登录后把 token 写入 Loon）
 //
 // v1.1（2026-08-10）：同时持久化 refreshToken 过期时间
 //（galaxyRefreshTokenExpiresAt，秒），供 cron 做到期预警/自动续期。
+// v1.2（2026-08-10）：持久化 galaxyCenterToken / galaxyCenterRefreshToken，
+// 供 cron 常态化刷新（/api/v1/login/refresh 换新 centerToken → 换 recharge token）。
 //
 // 银河网页登录页（charge_galaxy_login.js）完成 getTokenByCode 后，
 // 把 token 信息 POST 到 https://h5-recharge.geely.com/store-token
@@ -29,6 +31,8 @@ try {
       if (rExp > 1000000000000) rExp = Math.floor(rExp / 1000); // 毫秒转秒
       $persistentStore.write(String(rExp), "galaxyRefreshTokenExpiresAt");
     }
+    if (j.centerToken) $persistentStore.write(String(j.centerToken), "galaxyCenterToken");
+    if (j.centerRefreshToken) $persistentStore.write(String(j.centerRefreshToken), "galaxyCenterRefreshToken");
     console.log("[charge] 网页登录 token 已写入 Loon");
     $notification.post("充电桩修改：银河token已更新", "来自网页登录（约30分钟有效）", "");
   } else {

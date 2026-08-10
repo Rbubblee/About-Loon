@@ -1,11 +1,14 @@
 // ============================================================
-// charge_galaxy_login.js  v1.2（银河账号网页登录页，替代银河App）
+// charge_galaxy_login.js  v1.3（银河账号网页登录页，替代银河App）
 //
 // v1.1（2026-08-10）：把「获取安全配置失败：{}」的提示按根因分级——
 //   无 relay: 标记 → relay 规则未生效（旧插件/未删除重加/enableGwRelay 关）；
 //   relay host=h5-recharge → Loon 缓存了旧版 relay（需 ?v= 升版强制刷新）。
 // v1.2（2026-08-10）：store-token 提交体增加 refreshExpiresAt（秒），
 //   供 charge_refresh_galaxy.js 做 refreshToken 到期预警/自动续期。
+// v1.3（2026-08-10）：保存 galaxy-user-api 的 centerToken + centerRefreshToken
+//   到 Loon，供 cron 常态化刷新（/api/v1/login/refresh → oauth2/code →
+//   getTokenByCode 自动换全套新 token，参考 suyunkai/geely-galaxy-assistant）。
 //
 // 挂在 https://h5-recharge.geely.com/galaxy-login 下；两个网关的请求都走
 // charge_gw_relay.js 同源代理（/galaxy-gw、/recharge-gw），绕开网关对
@@ -515,6 +518,7 @@ $("btnLogin").onclick = async function () {
   var login = await galaxyPost(loginPath, null);
   if (login.code !== "success") { showMsg("登录失败：" + JSON.stringify(login).slice(0, 200), "err"); setBtn("btnLogin", false); return; }
   var centerToken = login.data.centerTokenDto.token;
+  var centerRefreshToken = (login.data.centerTokenDto && login.data.centerTokenDto.refreshToken) || "";
   var glUserId = String(login.data.centerUserInfoDto.id || "");
 
   // 5. oauth2/code（query 按字母序，scope 逗号不编码）
@@ -534,6 +538,7 @@ $("btnLogin").onclick = async function () {
     mobile: mobile,
     glUserId: glUserId,
     centerToken: centerToken,
+    centerRefreshToken: centerRefreshToken,
     authToken: d.authToken,
     refreshToken: d.refreshToken || "",
     authExpiresAt: authExp,
@@ -549,7 +554,7 @@ $("btnLogin").onclick = async function () {
     await fetch("https://h5-recharge.geely.com/store-token", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ authToken: d.authToken, refreshToken: d.refreshToken || "", userId: glUserId, expiresAt: Math.floor(authExp / 1000), refreshExpiresAt: Math.floor(refreshExp / 1000) })
+      body: JSON.stringify({ authToken: d.authToken, refreshToken: d.refreshToken || "", userId: glUserId, expiresAt: Math.floor(authExp / 1000), refreshExpiresAt: Math.floor(refreshExp / 1000), centerToken: centerToken, centerRefreshToken: centerRefreshToken })
     });
   } catch (e) {}
   $("sessionInfo").textContent = "登录成功：user_id=" + glUserId;

@@ -1,5 +1,5 @@
 // ============================================================
-// charge_refresh_galaxy.js  v1.4（cron 定时刷新，准实时 + token 生命周期）
+// charge_refresh_galaxy.js  v1.5（cron 定时刷新，准实时 + token 常态化）
 // 每 30 秒用银河【原生密钥】签名拉取业务接口，把实时数据写入 gx_<key>，
 // 供 charge_inject_zeekr.js 直接注入（页面加载读新鲜缓存，秒开）。
 //
@@ -12,6 +12,13 @@
 // v1.4：getEquipmentChargeOrders 补 chargeTime（YYYY.MM.DD）——6704 抓包实测
 //       缺该字段网关返回 500（H5 请求带 chargeTime 才 200）；每个接口成功
 //       时单独记录 gx_<key>_at 时间戳，避免单个接口失败拖累整体缓存年龄。
+// v1.5（2026-08-10 常态化，融合 suyunkai/geely-galaxy-assistant）：
+//       每 5 分钟自动执行 galaxy-user-api /api/v1/login/refresh
+//       （centerRefreshToken 旋转出新 centerToken+refreshToken）→ oauth2/code
+//       → getTokenByCode 换全新 recharge token 写入 Loon。只要 cron 在跑，
+//       authToken/refreshToken 永不过期，无需人工重登。
+//       注：jlyh 用安卓 key(204179735)+deviceSN 刷新；本脚本默认 iOS key
+//       (204925390)，若 /login/refresh 拒绝再切安卓参数（见下方注释）。
 // 注意：2026-08-07 实测发现 baidu 连通性自检同样失败（err=null），
 // 说明根因是 Loon 脚本网络层在当前设备/版本整体不可用（与 MITM、规则无关）。
 // 本脚本的实时刷新能力依赖 Loon 脚本网络恢复正常；在此之前由
@@ -238,6 +245,126 @@ function tryRefreshToken(cb) {
   cb(false);
 }
 
+// ---------------- 常态化刷新（v1.5）----------------
+// galaxy-user-api 签名（iOS key，与登录页一致）。若 /login/refresh 拒绝
+// （如要求安卓参数），改用 jlyh 的 key=204179735 secret=UhmsX3xStU4vrGHGYtqEXahtkYuQncMf
+// 并带上 deviceSN 头（需先从登录请求/抓包拿到 deviceSN）。
+var GALAXY_KEY = "204925390";
+var GALAXY_SECRET = "bVy52qsT6U5ElPOZN4vTkhnMdzedMjx6";
+var GALAXY_HOST = "https://galaxy-user-api.geely.com";
+var REFRESH_CYCLE_MS = 5 * 60 * 1000; // 常态化周期：每 5 分钟换全套新 token
+
+function galaxySign(method, path, bodyStr, glUserId, token) {
+  var accept = "application/json";
+  var ct = "application/json; charset=UTF-8";
+  var md5 = bodyStr ? b64encode(md5bytes(bodyStr)) : "1B2M2Y8AsgTpgAmY7PhCfg==";
+  var nonce = uuidv4();
+  var ts = String(Date.now());
+  var date = httpDateGMT8();
+  var hdrs = [
+    ["X-Ca-Key", GALAXY_KEY],
+    ["X-Ca-Nonce", nonce],
+    ["X-Ca-Signature-Method", "HmacSHA256"],
+    ["X-Ca-Timestamp", ts],
+    ["X-Ca-Version", "1"],
+    ["gl_user_id", glUserId || ""]
+  ];
+  if (token) hdrs.push(["token", token]);
+  var sigHdrs = "";
+  for (var i = 0; i < hdrs.length; i++) sigHdrs += (i ? "," : "") + hdrs[i][0];
+  var lines = [method, accept, md5, ct, date];
+  for (i = 0; i < hdrs.length; i++) lines.push(hdrs[i][0] + ":" + hdrs[i][1]);
+  lines.push(path);
+  var sig = b64encode(hmacSha256(GALAXY_SECRET, lines.join("\n")));
+  var headers = {
+    "User-Agent": "CA_iOS_SDK_2.0",
+    "Accept": accept,
+    "Content-Type": ct,
+    "Date": date,
+    "X-Galaxy-Date": date,
+    "Content-MD5": md5,
+    "X-Ca-Signature": sig,
+    "X-Ca-Signature-Headers": sigHdrs,
+    "appId": "galaxy-app",
+    "appVersion": "1.53.0",
+    "platform": "IOS",
+    "tenantId": "569001701001"
+  };
+  for (i = 0; i < hdrs.length; i++) headers[hdrs[i][0]] = hdrs[i][1];
+  return headers;
+}
+
+// 步骤1：/api/v1/login/refresh 旋转 centerToken + centerRefreshToken
+function refreshCenterToken(cb) {
+  var rt = $persistentStore.read("galaxyCenterRefreshToken") || "";
+  var ct = $persistentStore.read("galaxyCenterToken") || "";
+  var uid = $persistentStore.read("galaxyUserId") || "";
+  if (!rt) { cb(false, ""); return; }
+  var path = "/api/v1/login/refresh?refreshToken=" + encodeURIComponent(rt);
+  var headers = galaxySign("GET", path, "", uid, ct);
+  $httpClient.get({ url: GALAXY_HOST + path, headers: headers, timeout: 8000 }, function (err, resp, data) {
+    try {
+      if (!err && resp && resp.statusCode === 200 && data) {
+        var j = JSON.parse(data);
+        if (j.code === "success" && j.data && j.data.centerTokenDto && j.data.centerTokenDto.token) {
+          var d = j.data.centerTokenDto;
+          $persistentStore.write(d.token, "galaxyCenterToken");
+          if (d.refreshToken) $persistentStore.write(d.refreshToken, "galaxyCenterRefreshToken");
+          console.log("[charge] centerToken 刷新成功");
+          cb(true, d.token);
+          return;
+        }
+        console.log("[charge] centerToken 刷新失败: " + String(data).slice(0, 240));
+      } else {
+        console.log("[charge] centerToken 刷新请求失败 err=" + String(err) + " status=" + (resp ? resp.statusCode : "无"));
+      }
+    } catch (e) {}
+    cb(false, "");
+  });
+}
+
+// 步骤2-3：oauth2/code → getTokenByCode 换全新 recharge token
+function exchangeRechargeToken(centerToken, cb) {
+  var uid = $persistentStore.read("galaxyUserId") || "";
+  var oauthPath = "/api/v1/oauth2/code?client_id=30000023&response_type=code&scope=snsapiUserinfo,snsapiMobile";
+  var headers = galaxySign("GET", oauthPath, "", uid, centerToken);
+  $httpClient.get({ url: GALAXY_HOST + oauthPath, headers: headers, timeout: 8000 }, function (err, resp, data) {
+    var code = "";
+    try {
+      var j = JSON.parse(data);
+      if (j.code === "success" && j.data && j.data.code) {
+        code = j.data.code;
+      } else {
+        console.log("[charge] oauth2/code 失败: " + String(data).slice(0, 240));
+      }
+    } catch (e) {}
+    if (!code) { cb(false); return; }
+    var bodyStr = JSON.stringify({ code: code, sourceTypeKey: "0010000" });
+    var rHeaders = signRecharge("POST", "/gep/v2/common/getTokenByCode", bodyStr, "");
+    $httpClient.post({ url: API_HOST + "/gep/v2/common/getTokenByCode", headers: rHeaders, body: bodyStr, timeout: 8000 }, function (err2, resp2, data2) {
+      try {
+        var t = JSON.parse(data2);
+        if (t.code === "0" || t.code === 0) {
+          var d = t.data;
+          var now = Math.floor(Date.now() / 1000);
+          $persistentStore.write(d.authToken, "galaxyRechargeToken");
+          $persistentStore.write(String(now + (typeof d.expireAt === "number" ? d.expireAt : 1799)), "galaxyTokenExpiresAt");
+          if (d.refreshToken) $persistentStore.write(d.refreshToken, "galaxyRefreshToken");
+          if (d.refreshExpireAt) {
+            var re = d.refreshExpireAt > 1000000000000 ? Math.floor(d.refreshExpireAt / 1000) : d.refreshExpireAt;
+            $persistentStore.write(String(re), "galaxyRefreshTokenExpiresAt");
+          }
+          console.log("[charge] recharge token 常态化刷新成功");
+          cb(true);
+          return;
+        }
+        console.log("[charge] getTokenByCode 失败: " + String(data2).slice(0, 240));
+      } catch (e) {}
+      cb(false);
+    });
+  });
+}
+
 // ---------------- 接口清单（与注入脚本 MAP 保持一致） ----------------
 var ENDPOINTS = [
   { key: "getMyEquipments", path: "/gep/v2/home/charge/getMyEquipments", body: function (u, eq, p) { return { sourceTypeKey: "0010000", userId: u }; }, always: true },
@@ -257,7 +384,8 @@ function todayChargeTime() {
   return d.getUTCFullYear() + "." + p(d.getUTCMonth() + 1) + "." + p(d.getUTCDate());
 }
 
-// ---------------- 主流程 ----------------
+// ---------------- 业务刷新（每次 cron 调用执行一次） ----------------
+function businessRefreshOnce() {
 try {
   var token = $persistentStore.read("galaxyRechargeToken") || "";
   var userId = $persistentStore.read("galaxyUserId") || "";
@@ -389,5 +517,32 @@ try {
   }
 } catch (e) {
   console.log("[charge] cron 错误: " + (e && e.message ? e.message : String(e)));
+  $done({});
+}
+}
+
+// ---------------- 主流程：常态化优先，再做业务刷新 ----------------
+try {
+  var centerRefresh = $persistentStore.read("galaxyCenterRefreshToken") || "";
+  var lastCycle = parseInt($persistentStore.read("galaxyTokenCycleAt") || "0", 10);
+  var cycleDue = (Date.now() - lastCycle) > REFRESH_CYCLE_MS;
+  if (cycleDue && centerRefresh) {
+    refreshCenterToken(function (ok, newCt) {
+      if (ok && newCt) {
+        exchangeRechargeToken(newCt, function (ok2) {
+          $persistentStore.write(String(Date.now()), "galaxyTokenCycleAt");
+          console.log("[charge] 常态化刷新 " + (ok2 ? "成功" : "换token失败"));
+          businessRefreshOnce();
+        });
+      } else {
+        console.log("[charge] 常态化 centerToken 刷新失败");
+        businessRefreshOnce();
+      }
+    });
+  } else {
+    businessRefreshOnce();
+  }
+} catch (e) {
+  console.log("[charge] 常态化主流程错误: " + (e && e.message ? e.message : String(e)));
   $done({});
 }
