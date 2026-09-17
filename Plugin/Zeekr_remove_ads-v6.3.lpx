@@ -1,0 +1,74 @@
+#!name=ZEEKR NOAD
+#!desc=极氪App去广告（v6.3：首页浮窗「邀好友得好礼」加固屏蔽——请求级合成空浮窗+响应级清空iconUrl/linkUrl/title；新增「我的页推荐位文案」屏蔽；弹窗与社区banner开关拆分；全部脚本改用Loon官方顶层$done({status,headers,body})并清content-length/content-encoding；脚本URL加?v=避开Loon脚本缓存）
+#!openUrl=https://apps.apple.com/app/id1572626106
+#!homepage=https://github.com/Rbubblee/About-Loon/blob/main/Plugin/Zeekr_remove_ads.lpx
+#!system=iOS,iPadOS
+#!system_version=15
+#!loon_version=3.3.8(932)
+#!author=Rbubblee
+#!tag=去广告,极氪,Zeekr
+#!icon=https://raw.githubusercontent.com/luestr/IconResource/main/App_icon/120px/AdBlock.png
+#!date=2026-09-17
+
+[Argument]
+blockBrandCare=switch,true,tag=[浮窗]首页品牌关怀浮窗（邀好友得好礼）
+blockUserRecommend=switch,true,tag=[我的]推荐位文案（邀试驾得好礼）
+blockPopup=switch,true,tag=[弹窗]开屏弹窗+首页启动弹窗
+blockCommunityBanner=switch,true,tag=[社区]顶部Banner广告
+blockCommunityContent=switch,true,tag=[社区]内容区(美图/九宫格/电台)
+blockCommunityDiscovery=switch,true,tag=[社区]发现页活动推荐
+blockHomepage=switch,true,tag=[首页]官方资讯+分类模块
+blockProfileAds=switch,true,tag=[我的]主题专区等推广位
+blockActivityH5=switch,true,tag=[活动]活动H5页面
+blockMarketing=switch,true,tag=[活动]营销消息推送
+blockMall=switch,true,tag=[商城]极物商城
+debugNotify=switch,false,tag=调试通知（命中规则时弹提示）
+
+[Rule]
+; 本项目全部用 [Script] 处理，无需域名级阻断
+
+[Rewrite]
+; 空：Loon 3.5.x 实测插件内 URL Rewrite / response-body-json-jq 不生效，全部改为 [Script]
+
+[Script]
+; ================================================================
+; 规则说明（2026-09-17 抓包核对）
+;   · 首页浮窗（邀好友得好礼）真正的数据源是
+;       POST api-gw-toc.zeekrlife.com/zeekrlife-app-user/anniversary/2022/open/getBrandCare415Info
+;     请求体 {"bubbleType":"1"}，响应 data.{isShow,iconUrl,linkUrl,title}
+;     → 只改 isShow=0 时新版 App 仍会渲染，故请求级直接合成空浮窗 + 响应级清空全部可渲染字段
+;   · 我的页推广文案来自 zeekrlife-app-user/v1/user/info/home 的 data.recommendText
+;   · 「我的」页/社区/弹窗的容器数据都在 zeekrlife-mp-bnr/open/v1/container/page
+; ================================================================
+
+; --- 首页浮窗：请求级合成空响应（最彻底，不发上游） ---
+http-request ^https?:\/\/api-gw-toc\.zeekrlife\.com\/zeekrlife-app-user\/anniversary\/2022\/open\/getBrandCare.*$ script-path=https://raw.githubusercontent.com/Rbubblee/About-Loon/main/Script/zeekr_brandcare.js?v=2000, requires-body=false, timeout=10, tag=zeekr.brandcare.req, argument=[{blockBrandCare},{debugNotify}], enable={blockBrandCare}
+; --- 首页浮窗：响应级兜底（万一请求级未生效） ---
+http-response ^https?:\/\/api-gw-toc\.zeekrlife\.com\/zeekrlife-app-user\/anniversary\/2022\/open\/getBrandCare.*$ script-path=https://raw.githubusercontent.com/Rbubblee/About-Loon/main/Script/zeekr_brandcare.js?v=2000, requires-body=true, timeout=10, tag=zeekr.brandcare.resp, argument=[{blockBrandCare},{debugNotify}], enable={blockBrandCare}
+
+; --- 我的页推荐位文案（只清推广字段，昵称/头像/极分等正常数据不动） ---
+http-response ^https?:\/\/api-gw-toc\.zeekrlife\.com\/zeekrlife-app-user\/v1\/user\/info\/home(\?.*)?$ script-path=https://raw.githubusercontent.com/Rbubblee/About-Loon/main/Script/zeekr_userinfo_home.js?v=1000, requires-body=true, timeout=10, tag=zeekr.userhome, argument=[{blockUserRecommend},{debugNotify}], enable={blockUserRecommend}
+
+; --- 容器接口：弹窗 / 社区banner / 社区内容区 / 我的页推广位 ---
+; 说明：不带 enable=，脚本内按 5 个开关独立判断，避免「关掉社区banner导致我的页过滤一起失效」
+http-response ^https?:\/\/api-gw-toc\.zeekrlife\.com\/zeekrlife-mp-bnr\/open\/v1\/container\/page.*$ script-path=https://raw.githubusercontent.com/Rbubblee/About-Loon/main/Script/zeekr_container.js?v=2000, requires-body=true, timeout=10, tag=zeekr.container, argument=[{blockPopup},{blockCommunityBanner},{blockCommunityContent},{blockProfileAds},{debugNotify}]
+
+; --- 社区发现页 / 卡片推荐 ---
+http-response ^https?:\/\/api-gw-toc\.zeekrlife\.com\/zeekrlife-bbs-theme\/v1\/discovery\/pub\/list\/activitySessionListWithRecommendationsV2.*$ script-path=https://raw.githubusercontent.com/Rbubblee/About-Loon/main/Script/zeekr_discovery.js?v=2000, requires-body=true, timeout=10, tag=zeekr.discovery, argument=[{blockCommunityDiscovery},{debugNotify}], enable={blockCommunityDiscovery}
+http-response ^https?:\/\/api-gw-toc\.zeekrlife\.com\/zeekrlife-bbs-theme\/toc\/v1\/srv\/card\/list.*$ script-path=https://raw.githubusercontent.com/Rbubblee/About-Loon/main/Script/zeekr_discovery.js?v=2000, requires-body=true, timeout=10, tag=zeekr.cards, argument=[{blockCommunityDiscovery},{debugNotify}], enable={blockCommunityDiscovery}
+
+; --- 首页低代码模块 ---
+http-response ^https?:\/\/api-gw-toc\.zeekrlife\.com\/zeekrlife-mp-bnr\/toc\/v1\/lowPage\/open\/getView.*$ script-path=https://raw.githubusercontent.com/Rbubblee/About-Loon/main/Script/zeekr_homepage.js?v=2000, requires-body=true, timeout=10, tag=zeekr.homepage, argument=[{blockHomepage},{debugNotify}], enable={blockHomepage}
+
+; --- 营销消息 ---
+http-response ^https?:\/\/api-gw-toc\.zeekrlife\.com\/zeekrlife-mp-mkt\/.*$ script-path=https://raw.githubusercontent.com/Rbubblee/About-Loon/main/Script/zeekr_marketing.js?v=2000, requires-body=true, timeout=10, tag=zeekr.marketing, argument=[{blockMarketing},{debugNotify}], enable={blockMarketing}
+
+; --- 活动H5（请求级拦截） ---
+http-request ^https?:\/\/activity-h5\.zeekrlife\.com\/.*$ script-path=https://raw.githubusercontent.com/Rbubblee/About-Loon/main/Script/zeekr_activity_mall.js?v=2000, requires-body=false, timeout=10, tag=zeekr.activity.h5, argument=[{blockActivityH5},{debugNotify}], enable={blockActivityH5}
+
+; --- 极物商城（请求级拦截） ---
+http-request ^https?:\/\/zeekrlife-halvie-mall-uni-h5\.halvie\.com\/.*$ script-path=https://raw.githubusercontent.com/Rbubblee/About-Loon/main/Script/zeekr_activity_mall.js?v=2000, requires-body=false, timeout=10, tag=zeekr.mall.h5, argument=[{blockMall},{debugNotify}], enable={blockMall}
+http-request ^https?:\/\/zkmall-apigw\.halvie\.com\/.*$ script-path=https://raw.githubusercontent.com/Rbubblee/About-Loon/main/Script/zeekr_activity_mall.js?v=2000, requires-body=false, timeout=10, tag=zeekr.mall.api, argument=[{blockMall},{debugNotify}], enable={blockMall}
+
+[MitM]
+hostname = api-gw-toc.zeekrlife.com, activity-h5.zeekrlife.com, zeekrlife-halvie-mall-uni-h5.halvie.com, zkmall-apigw.halvie.com

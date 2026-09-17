@@ -1,39 +1,106 @@
-// container/page 统一过滤
-// argument: [blockCommunityBanner, blockCommunityContent, blockProfileAds]
-let blockBanner = true;
-let blockContent = true;
-let blockProfile = true;
+// ============================================================
+// zeekr_container.js  v2.0 (2026-09-17)
+// 通用容器接口（弹窗 / 社区banner / 我的页推广位都走这里）
+// 接口: https://api-gw-toc.zeekrlife.com/zeekrlife-mp-bnr/open/v1/container/page
+//
+// 抓包实测的 tag/type（2026-09-17）:
+//   tag=BBS     name=APP开屏弹窗（新）        type=open   ← 开屏弹窗
+//   tag=BBS     name=APP首页启动弹窗          type=popup  ← 首页启动弹窗
+//   tag=BBS     name=推荐顶部banner（3.16版本） type=banner ← 社区顶部banner
+//   tag=BBS     name=0307新金刚位             type=banner ← 社区金刚位
+//   tag=BBS_MSG name=...                      type=...    ← 社区内容区
+//   tag=PARTNERLEAGUE ...                                 ← 合作伙伴
+//   tag=HAIBAO  name=个人页                    type=banner ← 我的页（推广位在 places[]）
+//   tag=OVSERVICE name=充电地图/用车服务/...              ← 用车服务（保留）
+//
+// v2.0 变化:
+//   1) 弹窗(type=popup/open)与社区banner分开控制，开关互不影响；
+//   2) 我的页 places[] 推广位按名称黑名单清理（原规则写死"主题专区限时开放"，广告换名即失效）；
+//   3) 规则不再用 enable={blockCommunityBanner} 单开关门控 —— 那样关掉社区banner就会连我的页过滤一起失效；
+//   4) 改用官方顶层 $done({status,headers,body}) 并清 content-length/content-encoding。
+//
+// argument: [{blockPopup},{blockCommunityBanner},{blockCommunityContent},{blockProfileAds},{debugNotify}]
+// ============================================================
 
-try {
-    if (typeof $argument === 'string' && $argument) {
-        const args = JSON.parse($argument);
-        if (Array.isArray(args)) {
-            blockBanner  = args[0] === true || args[0] === 'true';
-            blockContent = args[1] === true || args[1] === 'true';
-            blockProfile = args[2] === true || args[2] === 'true';
-        }
+function argBool(idx) {
+  try {
+    var a = $argument;
+    if (typeof a === "string" && a) a = JSON.parse(a);
+    if (Array.isArray(a)) {
+      var v = a[idx];
+      return v === true || v === "true" || v === 1 || v === "1";
     }
-} catch (e) {}
-
-const body = JSON.parse($response.body);
-if (!body.data || !body.data.records) {
-    $done({ body: JSON.stringify(body) });
-    return;
+  } catch (e) {}
+  return false;
 }
 
-body.data.records = body.data.records.filter(r => {
-    if (blockBanner && (r.tag === 'BBS')) return false;
-    if (blockContent && (r.tag === 'BBS_MSG' || r.tag === 'PARTNERLEAGUE')) return false;
-    return true;
-});
+var BLOCK_POPUP = argBool(0);
+var BLOCK_BANNER = argBool(1);
+var BLOCK_CONTENT = argBool(2);
+var BLOCK_PROFILE = argBool(3);
+var DEBUG = argBool(4);
 
-if (blockProfile) {
-    body.data.records = body.data.records.map(r => {
-        if (r.tag === 'HAIBAO' && r.places) {
-            r.places = r.places.filter(p => p.name !== '主题专区限时开放');
-        }
-        return r;
+// 我的页 places[] 推广位名称黑名单（可继续追加）
+var PROMO_PLACE = /主题专区|限时开放|得好礼|邀好友得好礼|广告|推广/;
+
+function notify(title, sub) {
+  try {
+    if (DEBUG) $notification.post("ZEEKR NOAD", title, sub || "");
+  } catch (e) {}
+}
+
+function cleanHeaders(h) {
+  h = Object.assign({}, h || {});
+  ["content-encoding", "Content-Encoding", "content-length", "Content-Length",
+   "transfer-encoding", "Transfer-Encoding"].forEach(function (k) { delete h[k]; });
+  h["content-type"] = "application/json";
+  return h;
+}
+
+(function () {
+  if (typeof $response === "undefined") { $done({}); return; }
+
+  // 全关时零改动放行
+  if (!BLOCK_POPUP && !BLOCK_BANNER && !BLOCK_CONTENT && !BLOCK_PROFILE) { $done({}); return; }
+
+  try {
+    var body = JSON.parse($response.body || "{}");
+    var data = body && body.data;
+    if (!data || !Array.isArray(data.records)) {
+      $done({ status: 200, headers: cleanHeaders($response.headers), body: JSON.stringify(body) });
+      return;
+    }
+
+    var removed = [];
+    data.records = data.records.filter(function (r) {
+      if (!r || typeof r !== "object") return true;
+      var tag = String(r.tag || "");
+      var type = String(r.type || "");
+      var name = String(r.name || "");
+
+      if (BLOCK_POPUP && (type === "popup" || type === "open" || name.indexOf("弹窗") >= 0)) {
+        removed.push("弹窗:" + name);
+        return false;
+      }
+      if (BLOCK_BANNER && tag === "BBS") { removed.push("banner:" + name); return false; }
+      if (BLOCK_CONTENT && (tag === "BBS_MSG" || tag === "PARTNERLEAGUE")) {
+        removed.push("内容:" + name);
+        return false;
+      }
+      if (BLOCK_PROFILE && Array.isArray(r.places)) {
+        var before = r.places.length;
+        r.places = r.places.filter(function (p) {
+          return !(p && PROMO_PLACE.test(String(p.name || "")));
+        });
+        if (r.places.length !== before) removed.push("我的页:" + name + "(-" + (before - r.places.length) + ")");
+      }
+      return true;
     });
-}
 
-$done({ body: JSON.stringify(body) });
+    if (removed.length) notify("容器接口已清理", removed.join(" / "));
+    $done({ status: 200, headers: cleanHeaders($response.headers), body: JSON.stringify(body) });
+  } catch (e) {
+    notify("容器脚本异常（放行原响应）", String((e && e.message) || e));
+    $done({});
+  }
+})();
