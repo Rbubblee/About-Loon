@@ -1,5 +1,5 @@
 #!name=ZEEKR NOAD
-#!desc=极氪App去广告与页面精简（v7.2：社区整页、商城整页一键屏蔽；移除已失效的插件图标资源，修复 Loon 下载资源时一直转圈）
+#!desc=极氪App去广告与页面精简（v7.3：新增「宝藏精选·作品上传」等我的页推广卡片精确清理；社区整页、商城整页一键屏蔽；移除失效图标资源）
 #!openUrl=https://apps.apple.com/app/id1572626106
 #!homepage=https://github.com/Rbubblee/About-Loon/blob/main/Plugin/Zeekr_remove_ads.lpx
 #!system=iOS,iPadOS
@@ -56,11 +56,11 @@ http-request ^https?:\/\/api-gw-toc\.zeekrlife\.com\/zeekrlife-app-user\/anniver
 http-response ^https?:\/\/api-gw-toc\.zeekrlife\.com\/zeekrlife-app-user\/anniversary\/2022\/open\/getBrandCare.*$ script-path=https://raw.githubusercontent.com/Rbubblee/About-Loon/main/Script/zeekr_brandcare.js?v=2000, requires-body=true, timeout=10, tag=zeekr.brandcare.resp, argument=[{blockBrandCare},{debugNotify}], enable={blockBrandCare}
 
 ; --- 我的页推荐位文案（只清推广字段，昵称/头像/极分等正常数据不动） ---
-http-response ^https?:\/\/api-gw-toc\.zeekrlife\.com\/zeekrlife-app-user\/v1\/user\/info\/home(\?.*)?$ script-path=https://raw.githubusercontent.com/Rbubblee/About-Loon/main/Script/zeekr_userinfo_home.js?v=1000, requires-body=true, timeout=10, tag=zeekr.userhome, argument=[{blockUserRecommend},{debugNotify}], enable={blockUserRecommend}
+http-response ^https?:\/\/api-gw-toc\.zeekrlife\.com\/zeekrlife-app-user\/v1\/user\/info\/home(\?.*)?$ script-path=https://raw.githubusercontent.com/Rbubblee/About-Loon/main/Script/zeekr_userinfo_home.js?v=1102, requires-body=true, timeout=10, tag=zeekr.userhome, argument=[{blockUserRecommend},{debugNotify}], enable={blockUserRecommend}
 
 ; --- 容器接口：弹窗 / 社区banner / 社区内容区 / 我的页推广位 ---
 ; 说明：不带 enable=，脚本内按 5 个开关独立判断，避免「关掉社区banner导致我的页过滤一起失效」
-http-response ^https?:\/\/api-gw-toc\.zeekrlife\.com\/zeekrlife-mp-bnr\/open\/v1\/container\/page.*$ script-path=https://raw.githubusercontent.com/Rbubblee/About-Loon/main/Script/zeekr_container.js?v=2000, requires-body=true, timeout=10, tag=zeekr.container, argument=[{blockPopup},{blockCommunityBanner},{blockCommunityContent},{blockProfileAds},{debugNotify}]
+http-response ^https?:\/\/api-gw-toc\.zeekrlife\.com\/zeekrlife-mp-bnr\/open\/v1\/container\/page.*$ script-path=https://raw.githubusercontent.com/Rbubblee/About-Loon/main/Script/zeekr_container.js?v=2101, requires-body=true, timeout=10, tag=zeekr.container, argument=[{blockPopup},{blockCommunityBanner},{blockCommunityContent},{blockProfileAds},{debugNotify}]
 
 ; --- 社区发现页 / 卡片推荐 ---
 http-response ^https?:\/\/api-gw-toc\.zeekrlife\.com\/zeekrlife-bbs-theme\/v1\/discovery\/pub\/list\/activitySessionListWithRecommendationsV2.*$ script-path=https://raw.githubusercontent.com/Rbubblee/About-Loon/main/Script/zeekr_discovery.js?v=2000, requires-body=true, timeout=10, tag=zeekr.discovery, argument=[{blockCommunityDiscovery},{debugNotify}], enable={blockCommunityDiscovery}

@@ -1,5 +1,5 @@
 // ============================================================
-// zeekr_userhome.js  v1.0 (2026-09-17)
+// zeekr_userhome.js  v1.1 (2026-10-22)
 // 【我的页】用户卡片推荐位文案
 // 接口: https://api-gw-toc.zeekrlife.com/zeekrlife-app-user/v1/user/info/home
 //   响应里的 data.recommendText 实测为推广文案（抓包值："邀试驾[得好礼]"），
@@ -39,9 +39,29 @@ function cleanHeaders(h) {
 
 // 推广字段：recommendText / recommendUrl / recommendLink / adText / adUrl / promotion*
 var PROMO_KEY = /^(recommend|ad|promotion|promo|marketing)/i;
+var PROFILE_PROMO = /宝藏精选|作品上传/;
+
+function promoText(value) {
+  if (!value || typeof value !== "object") return "";
+  return ["name", "title", "subTitle", "subtitle", "desc", "description", "text", "label"]
+    .map(function (k) { return String(value[k] || ""); })
+    .join(" ");
+}
 
 function stripPromo(node, hits) {
   if (!node || typeof node !== "object") return;
+  if (Array.isArray(node)) {
+    for (var i = node.length - 1; i >= 0; i--) {
+      var item = node[i];
+      if (item && typeof item === "object" && PROFILE_PROMO.test(promoText(item))) {
+        hits.push("推广卡片:" + promoText(item).trim().slice(0, 40));
+        node.splice(i, 1);
+      } else {
+        stripPromo(item, hits);
+      }
+    }
+    return;
+  }
   Object.keys(node).forEach(function (k) {
     var v = node[k];
     if (PROMO_KEY.test(k)) {
@@ -55,6 +75,9 @@ function stripPromo(node, hits) {
         hits.push(k + "={...}");
         node[k] = Array.isArray(v) ? [] : {};
       }
+    } else if (v && typeof v === "object" && PROFILE_PROMO.test(promoText(v))) {
+      hits.push("推广卡片:" + promoText(v).trim().slice(0, 40));
+      delete node[k];
     } else if (v && typeof v === "object") {
       stripPromo(v, hits);
     }
