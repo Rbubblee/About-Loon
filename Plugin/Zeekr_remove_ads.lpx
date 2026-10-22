@@ -1,5 +1,5 @@
 #!name=ZEEKR NOAD
-#!desc=极氪App去广告与页面精简（v7.0：新增社区整页、商城整页一键屏蔽；保留首页浮窗、推荐位、弹窗、Banner、营销消息与活动H5开关；移除重复版本文件和无引用旧脚本）
+#!desc=极氪App去广告与页面精简（v7.1：社区整页、商城整页一键屏蔽；复用已有脚本资源以修复部分 Loon 插件加载一直转圈；移除重复版本文件、无引用旧脚本和非必要 MITM 域名）
 #!openUrl=https://apps.apple.com/app/id1572626106
 #!homepage=https://github.com/Rbubblee/About-Loon/blob/main/Plugin/Zeekr_remove_ads.lpx
 #!system=iOS,iPadOS
@@ -42,15 +42,14 @@ debugNotify=switch,false,tag=调试通知（命中规则时弹提示）
 ;   · 「我的」页/社区/弹窗的容器数据都在 zeekrlife-mp-bnr/open/v1/container/page
 ; ================================================================
 
-; --- 社区整页：请求级直接返回本地空响应，社区接口/H5不再请求上游 ---
-http-request ^https?:\/\/api-gw-toc\.zeekrlife\.com\/(zeekrlife-bbs-theme\/|zeekrlife-search-api\/search\/api\/new\/getTopicList|zeekrlife-dod-search\/v2\/open\/search\/shading).*$ script-path=https://raw.githubusercontent.com/Rbubblee/About-Loon/main/Script/zeekr_page_block.js?v=701, requires-body=false, timeout=10, tag=zeekr.community.page.api, argument=[{blockCommunityPage},{debugNotify}], enable={blockCommunityPage}
-http-request ^https?:\/\/(zeekrlife-h5\.zeekrlife\.com\/pagesCommunity\/|app\.zeekrlife\.com\/community\/).*$ script-path=https://raw.githubusercontent.com/Rbubblee/About-Loon/main/Script/zeekr_page_block.js?v=701, requires-body=false, timeout=10, tag=zeekr.community.page.h5, argument=[{blockCommunityPage},{debugNotify}], enable={blockCommunityPage}
+; --- 社区整页：复用已在旧版加载过的脚本，避免新增远程脚本导致插件资源校验卡住 ---
+http-request ^https?:\/\/api-gw-toc\.zeekrlife\.com\/(zeekrlife-bbs-theme\/|zeekrlife-search-api\/search\/api\/new\/getTopicList|zeekrlife-dod-search\/v2\/open\/search\/shading).*$ script-path=https://raw.githubusercontent.com/Rbubblee/About-Loon/main/Script/zeekr_activity_mall.js?v=2000, requires-body=false, timeout=10, tag=zeekr.community.page.api, argument=[{blockCommunityPage},{debugNotify}], enable={blockCommunityPage}
+http-request ^https?:\/\/zeekrlife-h5\.zeekrlife\.com\/pagesCommunity\/.*$ script-path=https://raw.githubusercontent.com/Rbubblee/About-Loon/main/Script/zeekr_activity_mall.js?v=2000, requires-body=false, timeout=10, tag=zeekr.community.page.h5, argument=[{blockCommunityPage},{debugNotify}], enable={blockCommunityPage}
 
 ; --- 商城整页：原生商城业务接口 + 商城H5/API统一返回本地空响应 ---
-http-request ^https?:\/\/api-gw-toc\.zeekrlife\.com\/(zeekrlife-mp-cmall\/|pub\/v[0-9]+\/(article|category|combItem|comment|evaluation|goods|index|search|sts)\/|recommend\/v1\/goods\/|v[0-9]+\/(activity|goods|shoppingCart)\/).*$ script-path=https://raw.githubusercontent.com/Rbubblee/About-Loon/main/Script/zeekr_page_block.js?v=701, requires-body=false, timeout=10, tag=zeekr.mall.page.api, argument=[{blockMall},{debugNotify}], enable={blockMall}
-http-request ^https?:\/\/zeekrlife-halvie-mall-uni-h5\.halvie\.com\/.*$ script-path=https://raw.githubusercontent.com/Rbubblee/About-Loon/main/Script/zeekr_page_block.js?v=701, requires-body=false, timeout=10, tag=zeekr.mall.page.h5, argument=[{blockMall},{debugNotify}], enable={blockMall}
-http-request ^https?:\/\/zkmall-apigw\.halvie\.com\/.*$ script-path=https://raw.githubusercontent.com/Rbubblee/About-Loon/main/Script/zeekr_page_block.js?v=701, requires-body=false, timeout=10, tag=zeekr.mall.page.gw, argument=[{blockMall},{debugNotify}], enable={blockMall}
-http-request ^https?:\/\/zkmall-res\.halvie\.com\/.*$ script-path=https://raw.githubusercontent.com/Rbubblee/About-Loon/main/Script/zeekr_page_block.js?v=701, requires-body=false, timeout=10, tag=zeekr.mall.page.res, argument=[{blockMall},{debugNotify}], enable={blockMall}
+http-request ^https?:\/\/api-gw-toc\.zeekrlife\.com\/(zeekrlife-mp-cmall\/|pub\/v[0-9]+\/(article|category|combItem|comment|evaluation|goods|index|search|sts)\/|recommend\/v1\/goods\/|v[0-9]+\/(activity|goods|shoppingCart)\/).*$ script-path=https://raw.githubusercontent.com/Rbubblee/About-Loon/main/Script/zeekr_activity_mall.js?v=2000, requires-body=false, timeout=10, tag=zeekr.mall.page.api, argument=[{blockMall},{debugNotify}], enable={blockMall}
+http-request ^https?:\/\/zeekrlife-halvie-mall-uni-h5\.halvie\.com\/.*$ script-path=https://raw.githubusercontent.com/Rbubblee/About-Loon/main/Script/zeekr_activity_mall.js?v=2000, requires-body=false, timeout=10, tag=zeekr.mall.page.h5, argument=[{blockMall},{debugNotify}], enable={blockMall}
+http-request ^https?:\/\/zkmall-apigw\.halvie\.com\/.*$ script-path=https://raw.githubusercontent.com/Rbubblee/About-Loon/main/Script/zeekr_activity_mall.js?v=2000, requires-body=false, timeout=10, tag=zeekr.mall.page.gw, argument=[{blockMall},{debugNotify}], enable={blockMall}
 
 ; --- 首页浮窗：请求级合成空响应（最彻底，不发上游） ---
 http-request ^https?:\/\/api-gw-toc\.zeekrlife\.com\/zeekrlife-app-user\/anniversary\/2022\/open\/getBrandCare.*$ script-path=https://raw.githubusercontent.com/Rbubblee/About-Loon/main/Script/zeekr_brandcare.js?v=2000, requires-body=false, timeout=10, tag=zeekr.brandcare.req, argument=[{blockBrandCare},{debugNotify}], enable={blockBrandCare}
@@ -78,4 +77,4 @@ http-response ^https?:\/\/api-gw-toc\.zeekrlife\.com\/zeekrlife-mp-mkt\/.*$ scri
 http-request ^https?:\/\/activity-h5\.zeekrlife\.com\/.*$ script-path=https://raw.githubusercontent.com/Rbubblee/About-Loon/main/Script/zeekr_activity_mall.js?v=2000, requires-body=false, timeout=10, tag=zeekr.activity.h5, argument=[{blockActivityH5},{debugNotify}], enable={blockActivityH5}
 
 [MitM]
-hostname = api-gw-toc.zeekrlife.com, activity-h5.zeekrlife.com, zeekrlife-h5.zeekrlife.com, app.zeekrlife.com, zeekrlife-halvie-mall-uni-h5.halvie.com, zkmall-apigw.halvie.com, zkmall-res.halvie.com
+hostname = api-gw-toc.zeekrlife.com, activity-h5.zeekrlife.com, zeekrlife-h5.zeekrlife.com, zeekrlife-halvie-mall-uni-h5.halvie.com, zkmall-apigw.halvie.com
