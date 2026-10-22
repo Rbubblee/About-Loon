@@ -1,5 +1,5 @@
 #!name=ZEEKR NOAD
-#!desc=极氪App去广告与页面精简（v7.4：新增「宝藏精选·作品上传」等我的页推广卡片精确清理；关键脚本固定到可立即刷新的版本地址；社区整页、商城整页一键屏蔽）
+#!desc=极氪App去广告与页面精简（v7.5：整块移除我的页 HAIBAO 推广 Banner，彻底清理「宝藏精选·作品上传」；保留头像、积分、订单等独立模块）
 #!openUrl=https://apps.apple.com/app/id1572626106
 #!homepage=https://github.com/Rbubblee/About-Loon/blob/main/Plugin/Zeekr_remove_ads.lpx
 #!system=iOS,iPadOS
@@ -60,7 +60,7 @@ http-response ^https?:\/\/api-gw-toc\.zeekrlife\.com\/zeekrlife-app-user\/v1\/us
 
 ; --- 容器接口：弹窗 / 社区banner / 社区内容区 / 我的页推广位 ---
 ; 说明：不带 enable=，脚本内按 5 个开关独立判断，避免「关掉社区banner导致我的页过滤一起失效」
-http-response ^https?:\/\/api-gw-toc\.zeekrlife\.com\/zeekrlife-mp-bnr\/open\/v1\/container\/page.*$ script-path=https://cdn.jsdelivr.net/gh/Rbubblee/About-Loon@5b48b5f11ec4954c3c88b0fcdefdce904e2a0a62/Script/zeekr_container.js, requires-body=true, timeout=10, tag=zeekr.container, argument=[{blockPopup},{blockCommunityBanner},{blockCommunityContent},{blockProfileAds},{debugNotify}]
+http-response ^https?:\/\/api-gw-toc\.zeekrlife\.com\/zeekrlife-mp-bnr\/open\/v1\/container\/page.*$ script-path=https://cdn.jsdelivr.net/gh/Rbubblee/About-Loon@c374ce1/Script/zeekr_container.js, requires-body=true, timeout=10, tag=zeekr.container, argument=[{blockPopup},{blockCommunityBanner},{blockCommunityContent},{blockProfileAds},{debugNotify}]
 
 ; --- 社区发现页 / 卡片推荐 ---
 http-response ^https?:\/\/api-gw-toc\.zeekrlife\.com\/zeekrlife-bbs-theme\/v1\/discovery\/pub\/list\/activitySessionListWithRecommendationsV2.*$ script-path=https://raw.githubusercontent.com/Rbubblee/About-Loon/main/Script/zeekr_discovery.js?v=2000, requires-body=true, timeout=10, tag=zeekr.discovery, argument=[{blockCommunityDiscovery},{debugNotify}], enable={blockCommunityDiscovery}
