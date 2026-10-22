@@ -1,5 +1,5 @@
 // ============================================================
-// zeekr_container.js  v2.1 (2026-10-22)
+// zeekr_container.js  v2.2 (2026-10-22)
 // 通用容器接口（弹窗 / 社区banner / 我的页推广位都走这里）
 // 接口: https://api-gw-toc.zeekrlife.com/zeekrlife-mp-bnr/open/v1/container/page
 //
@@ -119,6 +119,11 @@ function stripPromoObjects(node, hits) {
       if (BLOCK_BANNER && tag === "BBS") { removed.push("banner:" + name); return false; }
       if (BLOCK_CONTENT && (tag === "BBS_MSG" || tag === "PARTNERLEAGUE")) {
         removed.push("内容:" + name);
+        return false;
+      }
+      // 我的页推广位是一整块 Banner，标题可能写在图片中，无法靠文字字段识别。
+      if (BLOCK_PROFILE && tag === "HAIBAO") {
+        removed.push("我的页推广Banner:" + name);
         return false;
       }
       if (BLOCK_PROFILE && Array.isArray(r.places)) {
