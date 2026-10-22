@@ -1,5 +1,5 @@
 #!name=ZEEKR NOAD
-#!desc=极氪App去广告与页面精简（v7.1：社区整页、商城整页一键屏蔽；复用已有脚本资源以修复部分 Loon 插件加载一直转圈；移除重复版本文件、无引用旧脚本和非必要 MITM 域名）
+#!desc=极氪App去广告与页面精简（v7.2：社区整页、商城整页一键屏蔽；移除已失效的插件图标资源，修复 Loon 下载资源时一直转圈）
 #!openUrl=https://apps.apple.com/app/id1572626106
 #!homepage=https://github.com/Rbubblee/About-Loon/blob/main/Plugin/Zeekr_remove_ads.lpx
 #!system=iOS,iPadOS
@@ -7,7 +7,6 @@
 #!loon_version=3.3.8(932)
 #!author=Rbubblee
 #!tag=去广告,极氪,Zeekr
-#!icon=https://raw.githubusercontent.com/luestr/IconResource/main/App_icon/120px/AdBlock.png
 #!date=2026-10-22
 
 [Argument]
