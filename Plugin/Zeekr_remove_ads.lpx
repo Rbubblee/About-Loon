@@ -64,11 +64,11 @@ http-request ^https?:\/\/api-gw-toc\.zeekrlife\.com\/zeekrlife-app-user\/anniver
 http-response ^https?:\/\/api-gw-toc\.zeekrlife\.com\/zeekrlife-app-user\/anniversary\/2022\/open\/getBrandCare.*$ script-path=https://raw.githubusercontent.com/Rbubblee/About-Loon/main/Script/zeekr_brandcare.js?v=2000, requires-body=true, timeout=10, tag=zeekr.brandcare.resp, argument=[{blockBrandCare},{debugNotify}], enable={blockBrandCare}
 
 ; --- 我的页推荐位文案（只清推广字段，昵称/头像/极分等正常数据不动） ---
-http-response ^https?:\/\/api-gw-toc\.zeekrlife\.com\/zeekrlife-app-user\/v1\/user\/info\/home(\?.*)?$ script-path=https://raw.githubusercontent.com/Rbubblee/About-Loon/main/Script/zeekr_userinfo_home.js?v=3000, requires-body=true, timeout=10, tag=zeekr.userhome, argument=[{blockUserRecommend},{debugNotify}], enable={blockUserRecommend}
+http-response ^https?:\/\/api-gw-toc\.zeekrlife\.com\/zeekrlife-app-user\/v1\/user\/info\/home(\?.*)?$ script-path=https://cdn.jsdelivr.net/gh/Rbubblee/About-Loon@1f10990/Script/zeekr_userinfo_home.js, requires-body=true, timeout=10, tag=zeekr.userhome, argument=[{blockUserRecommend},{debugNotify}], enable={blockUserRecommend}
 
 ; --- 容器接口：弹窗 / 社区banner / 社区内容区 / 我的页推广位 ---
 ; 说明：不带 enable=，脚本内按 4 个开关独立判断，避免「关掉社区banner导致我的页过滤一起失效」
-http-response ^https?:\/\/api-gw-toc\.zeekrlife\.com\/zeekrlife-mp-bnr\/open\/v1\/container\/page.*$ script-path=https://raw.githubusercontent.com/Rbubblee/About-Loon/main/Script/zeekr_container.js?v=3000, requires-body=true, timeout=10, tag=zeekr.container, argument=[{blockPopup},{blockCommunityBanner},{blockCommunityContent},{blockProfileAds},{debugNotify}]
+http-response ^https?:\/\/api-gw-toc\.zeekrlife\.com\/zeekrlife-mp-bnr\/open\/v1\/container\/page.*$ script-path=https://cdn.jsdelivr.net/gh/Rbubblee/About-Loon@1f10990/Script/zeekr_container.js, requires-body=true, timeout=10, tag=zeekr.container, argument=[{blockPopup},{blockCommunityBanner},{blockCommunityContent},{blockProfileAds},{debugNotify}]
 
 ; --- 社区发现页 / 卡片推荐 ---
 http-response ^https?:\/\/api-gw-toc\.zeekrlife\.com\/zeekrlife-bbs-theme\/v1\/discovery\/pub\/list\/activitySessionListWithRecommendationsV2.*$ script-path=https://raw.githubusercontent.com/Rbubblee/About-Loon/main/Script/zeekr_discovery.js?v=2000, requires-body=true, timeout=10, tag=zeekr.discovery, argument=[{blockCommunityDiscovery},{debugNotify}], enable={blockCommunityDiscovery}
@@ -78,31 +78,31 @@ http-response ^https?:\/\/api-gw-toc\.zeekrlife\.com\/zeekrlife-bbs-theme\/toc\/
 http-response ^https?:\/\/api-gw-toc\.zeekrlife\.com\/zeekrlife-mp-bnr\/toc\/v1\/lowPage\/open\/getView.*$ script-path=https://raw.githubusercontent.com/Rbubblee/About-Loon/main/Script/zeekr_homepage.js?v=2000, requires-body=true, timeout=10, tag=zeekr.homepage, argument=[{blockHomepage},{debugNotify}], enable={blockHomepage}
 
 ; --- 营销消息（原有 zeekrlife-mp-mkt） ---
-http-response ^https?:\/\/api-gw-toc\.zeekrlife\.com\/zeekrlife-mp-mkt\/.*$ script-path=https://raw.githubusercontent.com/Rbubblee/About-Loon/main/Script/zeekr_marketing.js?v=3000, requires-body=true, timeout=10, tag=zeekr.marketing, argument=[{blockMarketing},{debugNotify}], enable={blockMarketing}
+http-response ^https?:\/\/api-gw-toc\.zeekrlife\.com\/zeekrlife-mp-mkt\/.*$ script-path=https://cdn.jsdelivr.net/gh/Rbubblee/About-Loon@1f10990/Script/zeekr_marketing.js, requires-body=true, timeout=10, tag=zeekr.marketing, argument=[{blockMarketing},{debugNotify}], enable={blockMarketing}
 
 ; ================================================================
 ; v7.6 新增：首方营销 / Banner / 弹窗接口（复用 zeekr_marketing.js，不新增远程脚本）
 ; ================================================================
 
 ; --- 首页 Banner + 推广文案（响应级深度清洗，保留正常字段） ---
-http-response ^https?:\/\/api-gw-toc\.zeekrlife\.com\/phone\/bannerDeploy\/action\/queryHomeBannerAndCopyWriting.*$ script-path=https://raw.githubusercontent.com/Rbubblee/About-Loon/main/Script/zeekr_marketing.js?v=3000, requires-body=true, timeout=10, tag=zeekr.ads.homebanner, argument=[{blockFirstPartyAds},{debugNotify}], enable={blockFirstPartyAds}
+http-response ^https?:\/\/api-gw-toc\.zeekrlife\.com\/phone\/bannerDeploy\/action\/queryHomeBannerAndCopyWriting.*$ script-path=https://cdn.jsdelivr.net/gh/Rbubblee/About-Loon@1f10990/Script/zeekr_marketing.js, requires-body=true, timeout=10, tag=zeekr.ads.homebanner, argument=[{blockFirstPartyAds},{debugNotify}], enable={blockFirstPartyAds}
 
 ; --- 出行生活 / 我的页推广位（响应级深度清洗） ---
-http-response ^https?:\/\/api-gw-toc\.zeekrlife\.com\/phone\/bannerDeploy\/action\/queryTravelLifeByPage.*$ script-path=https://raw.githubusercontent.com/Rbubblee/About-Loon/main/Script/zeekr_marketing.js?v=3000, requires-body=true, timeout=10, tag=zeekr.ads.travel, argument=[{blockFirstPartyAds},{debugNotify}], enable={blockFirstPartyAds}
+http-response ^https?:\/\/api-gw-toc\.zeekrlife\.com\/phone\/bannerDeploy\/action\/queryTravelLifeByPage.*$ script-path=https://cdn.jsdelivr.net/gh/Rbubblee/About-Loon@1f10990/Script/zeekr_marketing.js, requires-body=true, timeout=10, tag=zeekr.ads.travel, argument=[{blockFirstPartyAds},{debugNotify}], enable={blockFirstPartyAds}
 
 ; --- SDK 弹窗（请求级直接合成空响应） ---
-http-request ^https?:\/\/api-gw-toc\.zeekrlife\.com\/phone\/bannerDeploy\/action\/queryPopupForSdk.*$ script-path=https://raw.githubusercontent.com/Rbubblee/About-Loon/main/Script/zeekr_marketing.js?v=3000, requires-body=false, timeout=10, tag=zeekr.ads.sdkpopup.req, argument=[{blockFirstPartyAds},{debugNotify}], enable={blockFirstPartyAds}
-http-response ^https?:\/\/api-gw-toc\.zeekrlife\.com\/phone\/bannerDeploy\/action\/queryPopupForSdk.*$ script-path=https://raw.githubusercontent.com/Rbubblee/About-Loon/main/Script/zeekr_marketing.js?v=3000, requires-body=true, timeout=10, tag=zeekr.ads.sdkpopup.resp, argument=[{blockFirstPartyAds},{debugNotify}], enable={blockFirstPartyAds}
+http-request ^https?:\/\/api-gw-toc\.zeekrlife\.com\/phone\/bannerDeploy\/action\/queryPopupForSdk.*$ script-path=https://cdn.jsdelivr.net/gh/Rbubblee/About-Loon@1f10990/Script/zeekr_marketing.js, requires-body=false, timeout=10, tag=zeekr.ads.sdkpopup.req, argument=[{blockFirstPartyAds},{debugNotify}], enable={blockFirstPartyAds}
+http-response ^https?:\/\/api-gw-toc\.zeekrlife\.com\/phone\/bannerDeploy\/action\/queryPopupForSdk.*$ script-path=https://cdn.jsdelivr.net/gh/Rbubblee/About-Loon@1f10990/Script/zeekr_marketing.js, requires-body=true, timeout=10, tag=zeekr.ads.sdkpopup.resp, argument=[{blockFirstPartyAds},{debugNotify}], enable={blockFirstPartyAds}
 
 ; --- 浩物 Banner / 弹窗（请求级直接合成空响应） ---
-http-request ^https?:\/\/api-gw-toc\.zeekrlife\.com\/haohan-base-front\/banner\/get.*$ script-path=https://raw.githubusercontent.com/Rbubblee/About-Loon/main/Script/zeekr_marketing.js?v=3000, requires-body=false, timeout=10, tag=zeekr.ads.haohan.banner.req, argument=[{blockFirstPartyAds},{debugNotify}], enable={blockFirstPartyAds}
-http-response ^https?:\/\/api-gw-toc\.zeekrlife\.com\/haohan-base-front\/banner\/get.*$ script-path=https://raw.githubusercontent.com/Rbubblee/About-Loon/main/Script/zeekr_marketing.js?v=3000, requires-body=true, timeout=10, tag=zeekr.ads.haohan.banner.resp, argument=[{blockFirstPartyAds},{debugNotify}], enable={blockFirstPartyAds}
-http-request ^https?:\/\/api-gw-toc\.zeekrlife\.com\/haohan-base-front\/popup\/get.*$ script-path=https://raw.githubusercontent.com/Rbubblee/About-Loon/main/Script/zeekr_marketing.js?v=3000, requires-body=false, timeout=10, tag=zeekr.ads.haohan.popup.req, argument=[{blockFirstPartyAds},{debugNotify}], enable={blockFirstPartyAds}
-http-response ^https?:\/\/api-gw-toc\.zeekrlife\.com\/haohan-base-front\/popup\/get.*$ script-path=https://raw.githubusercontent.com/Rbubblee/About-Loon/main/Script/zeekr_marketing.js?v=3000, requires-body=true, timeout=10, tag=zeekr.ads.haohan.popup.resp, argument=[{blockFirstPartyAds},{debugNotify}], enable={blockFirstPartyAds}
+http-request ^https?:\/\/api-gw-toc\.zeekrlife\.com\/haohan-base-front\/banner\/get.*$ script-path=https://cdn.jsdelivr.net/gh/Rbubblee/About-Loon@1f10990/Script/zeekr_marketing.js, requires-body=false, timeout=10, tag=zeekr.ads.haohan.banner.req, argument=[{blockFirstPartyAds},{debugNotify}], enable={blockFirstPartyAds}
+http-response ^https?:\/\/api-gw-toc\.zeekrlife\.com\/haohan-base-front\/banner\/get.*$ script-path=https://cdn.jsdelivr.net/gh/Rbubblee/About-Loon@1f10990/Script/zeekr_marketing.js, requires-body=true, timeout=10, tag=zeekr.ads.haohan.banner.resp, argument=[{blockFirstPartyAds},{debugNotify}], enable={blockFirstPartyAds}
+http-request ^https?:\/\/api-gw-toc\.zeekrlife\.com\/haohan-base-front\/popup\/get.*$ script-path=https://cdn.jsdelivr.net/gh/Rbubblee/About-Loon@1f10990/Script/zeekr_marketing.js, requires-body=false, timeout=10, tag=zeekr.ads.haohan.popup.req, argument=[{blockFirstPartyAds},{debugNotify}], enable={blockFirstPartyAds}
+http-response ^https?:\/\/api-gw-toc\.zeekrlife\.com\/haohan-base-front\/popup\/get.*$ script-path=https://cdn.jsdelivr.net/gh/Rbubblee/About-Loon@1f10990/Script/zeekr_marketing.js, requires-body=true, timeout=10, tag=zeekr.ads.haohan.popup.resp, argument=[{blockFirstPartyAds},{debugNotify}], enable={blockFirstPartyAds}
 
 ; --- 广告追踪 / 弹窗曝光上报（请求级直接合成空响应） ---
-http-request ^https?:\/\/api-gw-toc\.zeekrlife\.com\/api\/mpbnr\/v1\/open\/toc\/apple\/adTrace\/receive.*$ script-path=https://raw.githubusercontent.com/Rbubblee/About-Loon/main/Script/zeekr_marketing.js?v=3000, requires-body=false, timeout=10, tag=zeekr.ads.trace, argument=[{blockFirstPartyAds},{debugNotify}], enable={blockFirstPartyAds}
-http-request ^https?:\/\/api-gw-toc\.zeekrlife\.com\/zeekrlife-mp-bnr\/toc\/v1\/popup\/record\/create.*$ script-path=https://raw.githubusercontent.com/Rbubblee/About-Loon/main/Script/zeekr_marketing.js?v=3000, requires-body=false, timeout=10, tag=zeekr.ads.exposure, argument=[{blockFirstPartyAds},{debugNotify}], enable={blockFirstPartyAds}
+http-request ^https?:\/\/api-gw-toc\.zeekrlife\.com\/api\/mpbnr\/v1\/open\/toc\/apple\/adTrace\/receive.*$ script-path=https://cdn.jsdelivr.net/gh/Rbubblee/About-Loon@1f10990/Script/zeekr_marketing.js, requires-body=false, timeout=10, tag=zeekr.ads.trace, argument=[{blockFirstPartyAds},{debugNotify}], enable={blockFirstPartyAds}
+http-request ^https?:\/\/api-gw-toc\.zeekrlife\.com\/zeekrlife-mp-bnr\/toc\/v1\/popup\/record\/create.*$ script-path=https://cdn.jsdelivr.net/gh/Rbubblee/About-Loon@1f10990/Script/zeekr_marketing.js, requires-body=false, timeout=10, tag=zeekr.ads.exposure, argument=[{blockFirstPartyAds},{debugNotify}], enable={blockFirstPartyAds}
 
 ; --- 活动H5（请求级拦截） ---
 http-request ^https?:\/\/activity-h5\.zeekrlife\.com\/.*$ script-path=https://raw.githubusercontent.com/Rbubblee/About-Loon/main/Script/zeekr_activity_mall.js?v=2000, requires-body=false, timeout=10, tag=zeekr.activity.h5, argument=[{blockActivityH5},{debugNotify}], enable={blockActivityH5}
