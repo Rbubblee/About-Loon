@@ -1,5 +1,5 @@
 #!name=ZEEKR NOAD
-#!desc=极氪App去广告（v9.0：修复版。加载即弹"ZEEKR NOAD v9/脚本已加载运行"通知，进"我的"页看到它就说明脚本生效；精准清除「我的」页宝藏精选·作品上传/邀请好友/达人招募，社区顶部banner与开屏弹窗，保留服务大厅/卡包/极分/订单等正常功能）
+#!desc=极氪App去广告（v10.0：关键修复版。脚本地址改回与插件订阅相同的 raw 域名，修复 v9 因 jsDelivr 域名手机端不通导致脚本根本没下载的问题；并兼容压缩二进制响应体。进入「我的」页会弹「ZEEKR NOAD v10/脚本已加载运行」，同时清除宝藏精选·作品上传/邀请好友/达人招募、社区顶部banner与开屏弹窗，保留服务大厅/卡包/极分/订单）
 #!openUrl=https://apps.apple.com/app/id1572626106
 #!homepage=https://github.com/Rbubblee/About-Loon/blob/main/Plugin/Zeekr_remove_ads.lpx
 #!system=iOS,iPadOS
@@ -9,9 +9,6 @@
 #!tag=去广告,极氪,Zeekr
 #!date=2026-11-18
 
-[Argument]
-debugNotify=switch,true,tag=调试通知（脚本加载即弹提示）
-
 [Rule]
 ; 全部用 [Script] 处理
 
@@ -20,19 +17,19 @@ debugNotify=switch,true,tag=调试通知（脚本加载即弹提示）
 
 [Script]
 ; ================================================================
-; v9.0 —— 极致精简，只保留一条核心规则：container/page
-;   我的页「宝藏精选·作品上传」+ 邀请好友/达人招募：
-;     POST api-gw-toc.zeekrlife.com/zeekrlife-mp-bnr/open/v1/container/page
-;     data.records[tag=HAIBAO].places[] 逐位删推广位，保留功能位
-;   社区顶部banner / 悬浮推广 / 开屏启动弹窗：同一接口的 tag=BBS
-;
-;   加载方式：沿用 v7.5 已验证能生效的 jsDelivr 固定 commit 地址
-;   （raw.githubusercontent.com 在本机 Loon 多次证明加载不到脚本）
-;   脚本一加载就弹通知，不依赖任何开关，一眼确认是否执行。
+; v10.0 —— 只修一件事：让脚本真的能被下载执行
+;   v9 失败根因：插件订阅用 raw.githubusercontent.com 能刷新成功（用户看到 v9），
+;   但 v9 的脚本地址写成了 cdn.jsdelivr.net —— 该域名国内手机网络经常不通，
+;   于是插件更新了、脚本却没下载，表现为"没通知也没去广告"。
+;   本版脚本地址改回 raw 同域名 + 全新文件名 zeekr_noad_v10.js（无 query，天然破缓存）。
+;   另：请求级 + 响应级各一条，进"我的"页任一环节命中都会弹通知，便于定位。
 ; ================================================================
 
-; --- 核心：容器接口（我的页推广位 + 社区banner/悬浮 + 弹窗）---
-http-response ^https?:\/\/api-gw-toc\.zeekrlife\.com\/zeekrlife-mp-bnr\/open\/v1\/container\/page.*$ script-path=https://cdn.jsdelivr.net/gh/Rbubblee/About-Loon@495bbe46e5344fd92ef1b9aca1d34d4f91a9330d/Script/zeekr_container.js, requires-body=true, timeout=10, tag=zeekr.container.clean
+; --- 请求级探针：命中即弹通知（证明规则与 MitM 都生效）---
+http-request ^https?:\/\/api-gw-toc\.zeekrlife\.com\/zeekrlife-mp-bnr\/open\/v1\/container\/page.*$ script-path=https://raw.githubusercontent.com/Rbubblee/About-Loon/main/Script/zeekr_noad_v10.js, requires-body=false, timeout=10, tag=zeekr.v10.req
+
+; --- 响应级：真正的清洗逻辑 ---
+http-response ^https?:\/\/api-gw-toc\.zeekrlife\.com\/zeekrlife-mp-bnr\/open\/v1\/container\/page.*$ script-path=https://raw.githubusercontent.com/Rbubblee/About-Loon/main/Script/zeekr_noad_v10.js, requires-body=true, timeout=10, tag=zeekr.v10.resp
 
 [MitM]
 hostname = api-gw-toc.zeekrlife.com
