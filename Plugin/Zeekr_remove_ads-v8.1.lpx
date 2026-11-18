@@ -1,0 +1,51 @@
+#!name=ZEEKR NOAD
+#!desc=极氪App去广告（v8.1：本版含自诊断通知，导入后打开"调试通知"开关，进"我的"页若弹出"ZEEKR诊断/clean脚本已运行"说明脚本生效。精准清除：我的页「宝藏精选·作品上传」等推广位、社区顶部banner与悬浮推广、开屏/启动弹窗，保留服务大厅/卡包/极分/订单等正常功能）
+#!openUrl=https://apps.apple.com/app/id1572626106
+#!homepage=https://github.com/Rbubblee/About-Loon/blob/main/Plugin/Zeekr_remove_ads.lpx
+#!system=iOS,iPadOS
+#!system_version=15
+#!loon_version=3.3.8(932)
+#!author=Rbubblee
+#!tag=去广告,极氪,Zeekr
+#!date=2026-11-18
+
+[Argument]
+blockProfileAds=switch,true,tag=[我的]推广位（宝藏精选·作品上传/邀请好友/达人招募）
+blockCommunityBanner=switch,true,tag=[社区]顶部banner与悬浮推广
+blockPopup=switch,true,tag=[弹窗]开屏弹窗+首页启动弹窗
+blockCommunityPage=switch,true,tag=[社区]整页接口拦截
+debugNotify=switch,true,tag=调试通知（命中弹提示，用于确认脚本是否生效）
+
+[Rule]
+; 全部用 [Script] 处理
+
+[Rewrite]
+; 空：Loon 实测插件内 URL Rewrite 不生效，全部改为 [Script]
+
+[Script]
+; ================================================================
+; v8.1 —— 聚焦用户明确要去掉的两类广告，用已验证的写法：
+;   1) 我的页「宝藏精选·作品上传」+ 邀请好友/达人招募：
+;      POST api-gw-toc.zeekrlife.com/zeekrlife-mp-bnr/open/v1/container/page
+;      的 data.records[tag=HAIBAO].places[]（逐位删推广位，保留功能位）
+;   2) 社区页悬浮/顶部推广 + 开屏/启动弹窗：同一 container/page 的
+;      tag=BBS type=banner(推荐顶部banner) / type=popup / type=open
+;   3) 社区整页接口：请求级拦截，不发上游。
+;
+;   脚本用全新文件名 zeekr_clean.js + ?v=6000，避免旧缓存；
+;   恢复 enable={开关} 语法（v7.5 验证过能生效的写法）。
+;   调试通知默认开：脚本执行即弹「ZEEKR诊断」，一眼判断脚本是否运行。
+; ================================================================
+
+; --- 容器接口：我的页推广位 + 社区banner/悬浮 + 弹窗（核心） ---
+; 不带 enable=，脚本内按 3 个开关独立判断
+http-response ^https?:\/\/api-gw-toc\.zeekrlife\.com\/zeekrlife-mp-bnr\/open\/v1\/container\/page.*$ script-path=https://raw.githubusercontent.com/Rbubblee/About-Loon/main/Script/zeekr_clean.js?v=6000, requires-body=true, timeout=10, tag=zeekr.container.clean, argument=[{blockPopup},{blockCommunityBanner},{blockProfileAds},{debugNotify}]
+
+; --- 首页 getView 里也含「宝藏精选」资讯位，响应级兜底清洗 ---
+http-response ^https?:\/\/api-gw-toc\.zeekrlife\.com\/zeekrlife-mp-bnr\/toc\/v1\/lowPage\/open\/getView.*$ script-path=https://raw.githubusercontent.com/Rbubblee/About-Loon/main/Script/zeekr_clean.js?v=6000, requires-body=true, timeout=10, tag=zeekr.homeview.clean, argument=[{blockPopup},{blockCommunityBanner},{blockProfileAds},{debugNotify}], enable={blockProfileAds}
+
+; --- 社区整页接口：请求级拦截（接口不发送） ---
+http-request ^https?:\/\/api-gw-toc\.zeekrlife\.com\/(zeekrlife-bbs-theme\/|zeekrlife-search-api\/search\/api\/new\/getTopicList|zeekrlife-dod-search\/v2\/open\/search\/shading).*$ script-path=https://raw.githubusercontent.com/Rbubblee/About-Loon/main/Script/zeekr_clean.js?v=6000, requires-body=false, timeout=10, tag=zeekr.community.page, argument=[{blockPopup},{blockCommunityBanner},{blockProfileAds},{debugNotify}], enable={blockCommunityPage}
+
+[MitM]
+hostname = api-gw-toc.zeekrlife.com
