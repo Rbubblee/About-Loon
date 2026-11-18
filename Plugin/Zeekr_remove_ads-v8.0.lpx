@@ -1,0 +1,55 @@
+#!name=ZEEKR NOAD
+#!desc=极氪App去广告与页面精简（v8.0 重构：改用通用广告清洗引擎，一条通配规则覆盖极氪全部API响应，按字段名+推广文案+营销链接+卡片结构四重特征识别广告，接口以后改版也不会再失效。含我的页推广位、首页浮窗/弹窗、社区banner、首页资讯推广、社区/商城整页拦截）
+#!openUrl=https://apps.apple.com/app/id1572626106
+#!homepage=https://github.com/Rbubblee/About-Loon/blob/main/Plugin/Zeekr_remove_ads.lpx
+#!system=iOS,iPadOS
+#!system_version=15
+#!loon_version=3.3.8(932)
+#!author=Rbubblee
+#!tag=去广告,极氪,Zeekr
+#!date=2026-11-18
+
+[Argument]
+blockAll=switch,true,tag=通用广告清洗总开关（我的页推广/浮窗/弹窗/banner）
+blockCommunity=switch,true,tag=[社区]整页拦截（接口不发送）
+blockMall=switch,true,tag=[商城]整页拦截（接口不发送）
+debugNotify=switch,false,tag=调试通知（命中时弹提示，排查用）
+
+[Rule]
+; 本项目全部用 [Script] 通用清洗，无需域名级阻断
+
+[Rewrite]
+; 空：Loon 实测插件内 URL Rewrite 不生效，全部改为 [Script]
+
+[Script]
+; ================================================================
+; v8.0 设计说明 —— 通用广告清洗引擎（zeekr_universal.js）
+; ----------------------------------------------------------------
+; 旧版把每条规则写死到具体接口路径（如 userInfo/home），极氪一次改版
+; 换路径就全部失效（v7.7 就是补丁）。v8.0 彻底改为：
+;
+;   · 一条 http-request  通配规则：拦截社区/商城/浮窗接口，请求级直接
+;     合成空响应（连请求都不发）。
+;   · 一条 http-response 通配规则：极氪该域名下【所有】JSON 响应统一
+;     交给通用脚本递归清洗。
+;
+; 广告识别不依赖接口路径，靠四重特征：
+;   1) 字段名：banner/popup/promo/marketing/recommend/copywriting 等；
+;   2) 推广文案：邀好友/得好礼/宝藏精选/作品上传/达人招募/加入联盟等；
+;   3) 营销链接：指向 invite/activity/promo/marketing 的跳转；
+;   4) 卡片结构：带图片+营销跳转的推广位、popup/open 弹窗类型。
+;
+; 安全：昵称/头像/极分/积分/订单/车辆等白名单字段不动；广告卡片整块
+; 删除、字段级清空但保留 key，避免 App 取不到字段崩溃；无广告信号的
+; 响应原样放行。
+; ================================================================
+
+; --- 请求级：社区整页 / 商城整页 / 开屏浮窗，命中直接合成空响应 ---
+; 脚本内按 URL 特征判断，未命中的接口 $done({}) 原样放行
+http-request ^https?:\/\/api-gw-toc\.zeekrlife\.com\/.*$ script-path=https://raw.githubusercontent.com/Rbubblee/About-Loon/main/Script/zeekr_universal.js?v=5000, requires-body=false, timeout=10, tag=zeekr.universal.req, argument=[{blockAll},{blockCommunity},{blockMall},{debugNotify}]
+
+; --- 响应级：全部 API 响应交给通用引擎递归清洗 ---
+http-response ^https?:\/\/api-gw-toc\.zeekrlife\.com\/.*$ script-path=https://raw.githubusercontent.com/Rbubblee/About-Loon/main/Script/zeekr_universal.js?v=5000, requires-body=true, timeout=10, tag=zeekr.universal.resp, argument=[{blockAll},{blockCommunity},{blockMall},{debugNotify}]
+
+[MitM]
+hostname = api-gw-toc.zeekrlife.com
